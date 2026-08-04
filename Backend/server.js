@@ -37,6 +37,13 @@ app.use(
 
 app.use(express.json());
 
+app.get("/api/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "LMS API is healthy",
+  });
+});
+
 app.use("/api/auth", authRoutes);
 
 app.use("/api/admin", adminRoutes);
