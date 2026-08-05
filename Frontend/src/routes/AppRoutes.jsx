@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
@@ -26,6 +26,7 @@ import MySubmissions from "../pages/student/MySubmissions";
 import Progress from "../pages/student/Progress";
 import MyCertificates from "../pages/student/MyCertificates";
 import CertificatePreview from "../pages/student/CertificatePreview";
+
 // Admin Pages
 import AdminDashboard from "../pages/admin/Dashboard";
 import Courses from "../pages/admin/Courses";
@@ -37,34 +38,169 @@ import MentorCourses from "../pages/mentor/Courses";
 import MentorCourseDetails from "../pages/mentor/CourseDetails";
 import QuestionManagement from "../pages/mentor/QuestionManagement";
 import AssignmentSubmissions from "../pages/mentor/AssignmentSubmissions";
+
+// Common / Profile
 import Profile from "../pages/profile/Profile";
 import StudentLayout from "../layouts/StudentLayout";
+
+// Public
 import PublicLayout from "../layouts/PublicLayout";
 import Home from "../pages/public/Home";
+
+// Authentication
 import ForgotPassword from "../pages/auth/ForgotPassword";
 import ResetPassword from "../pages/auth/ResetPassword";
+
+// Common
 import Unauthorized from "../components/common/Unauthorized";
 import NotFound from "../components/common/NotFound";
+
+// Admin
 import EnrollmentRequests from "../pages/admin/EnrollmentRequests";
+
+/* =========================================================
+   GET LOGGED-IN USER
+========================================================= */
+
+const getStoredUser = () => {
+  try {
+    const user = localStorage.getItem("user");
+
+    return user ? JSON.parse(user) : null;
+  } catch (error) {
+    console.error("Failed to read stored user:", error);
+
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+
+    return null;
+  }
+};
+
+/* =========================================================
+   DASHBOARD REDIRECT
+========================================================= */
+
+const getDashboardPath = (role) => {
+  switch (role) {
+    case "admin":
+      return "/admin/dashboard";
+
+    case "mentor":
+      return "/mentor/dashboard";
+
+    case "student":
+      return "/student/dashboard";
+
+    default:
+      return "/";
+  }
+};
+
+/* =========================================================
+   HOME ROUTE
+   - Guest → Landing Page
+   - Logged-in user → Dashboard
+========================================================= */
+
+function HomeRoute() {
+  const user = getStoredUser();
+
+  if (user) {
+    return (
+      <Navigate
+        to={getDashboardPath(user.role)}
+        replace
+      />
+    );
+  }
+
+  return <Home />;
+}
+
+/* =========================================================
+   PUBLIC AUTH ROUTE
+   - Guest → Login/Register
+   - Logged-in user → Dashboard
+========================================================= */
+
+function PublicAuthRoute({ children }) {
+  const user = getStoredUser();
+
+  if (user) {
+    return (
+      <Navigate
+        to={getDashboardPath(user.role)}
+        replace
+      />
+    );
+  }
+
+  return children;
+}
+
+/* =========================================================
+   APP ROUTES
+========================================================= */
 
 function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Website */}
+
+        {/* =================================================
+            PUBLIC WEBSITE
+        ================================================= */}
+
         <Route element={<PublicLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/unauthorized" element={<Unauthorized />} />
+
+          <Route
+            path="/"
+            element={<HomeRoute />}
+          />
+
+          <Route
+            path="/unauthorized"
+            element={<Unauthorized />}
+          />
+
         </Route>
 
-        {/* Authentication */}
+        {/* =================================================
+            AUTHENTICATION
+        ================================================= */}
 
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route
+          path="/login"
+          element={
+            <PublicAuthRoute>
+              <Login />
+            </PublicAuthRoute>
+          }
+        />
 
-        <Route path="/reset-password/:token" element={<ResetPassword />} />
-        {/* ================= STUDENT ================= */}
+        <Route
+          path="/register"
+          element={
+            <PublicAuthRoute>
+              <Register />
+            </PublicAuthRoute>
+          }
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPassword />}
+        />
+
+        <Route
+          path="/reset-password/:token"
+          element={<ResetPassword />}
+        />
+
+        {/* =================================================
+            STUDENT
+        ================================================= */}
 
         <Route
           path="/student/dashboard"
@@ -191,6 +327,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/student/certificates"
           element={
@@ -208,6 +345,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/student/profile"
           element={
@@ -219,7 +357,9 @@ function AppRoutes() {
           }
         />
 
-        {/* ================= ADMIN ================= */}
+        {/* =================================================
+            ADMIN
+        ================================================= */}
 
         <Route
           path="/admin"
@@ -229,14 +369,37 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="enrollments" element={<EnrollmentRequests />} />
-          <Route path="courses" element={<Courses />} />
-          <Route path="people" element={<People />} />
-          <Route path="profile" element={<Profile />} />
+
+          <Route
+            path="dashboard"
+            element={<AdminDashboard />}
+          />
+
+          <Route
+            path="enrollments"
+            element={<EnrollmentRequests />}
+          />
+
+          <Route
+            path="courses"
+            element={<Courses />}
+          />
+
+          <Route
+            path="people"
+            element={<People />}
+          />
+
+          <Route
+            path="profile"
+            element={<Profile />}
+          />
+
         </Route>
 
-        {/* ================= MENTOR ================= */}
+        {/* =================================================
+            MENTOR
+        ================================================= */}
 
         <Route
           path="/mentor"
@@ -246,22 +409,48 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route path="dashboard" element={<MentorDashboard />} />
 
-          <Route path="courses" element={<MentorCourses />} />
+          <Route
+            path="dashboard"
+            element={<MentorDashboard />}
+          />
 
-          <Route path="course/:id" element={<MentorCourseDetails />} />
+          <Route
+            path="courses"
+            element={<MentorCourses />}
+          />
 
-          <Route path="quizzes/:quizId" element={<QuestionManagement />} />
+          <Route
+            path="course/:id"
+            element={<MentorCourseDetails />}
+          />
 
-          <Route path="profile" element={<Profile />} />
+          <Route
+            path="quizzes/:quizId"
+            element={<QuestionManagement />}
+          />
+
+          <Route
+            path="profile"
+            element={<Profile />}
+          />
 
           <Route
             path="assignments/:assignmentId/submissions"
             element={<AssignmentSubmissions />}
           />
+
         </Route>
-        <Route path="*" element={<NotFound />} />
+
+        {/* =================================================
+            404
+        ================================================= */}
+
+        <Route
+          path="*"
+          element={<NotFound />}
+        />
+
       </Routes>
     </BrowserRouter>
   );
