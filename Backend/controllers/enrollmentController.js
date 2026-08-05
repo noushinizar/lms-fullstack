@@ -3,9 +3,7 @@ import Course from "../models/Course.js";
 import Lesson from "../models/Lesson.js";
 import Progress from "../models/Progress.js";
 
-// @desc    Request Enrollment
-// @route   POST /api/enrollment
-// @access  Private (Student)
+
 export const enrollCourse = async (req, res) => {
   try {
     const studentId = req.user._id;
@@ -28,31 +26,67 @@ export const enrollCourse = async (req, res) => {
       });
     }
 
-    // Check existing enrollment request
+    // Check existing enrollment
     const existingEnrollment = await Enrollment.findOne({
       studentId,
       courseId,
     });
 
-    if (existingEnrollment) {
-      return res.status(400).json({
-        success: false,
-        message: `Enrollment already ${existingEnrollment.status}.`,
+    // No previous request
+    if (!existingEnrollment) {
+      const enrollment = await Enrollment.create({
+        studentId,
+        courseId,
+        status: "pending",
+        requestedAt: new Date(),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message:
+          "Enrollment request submitted successfully. Waiting for admin approval.",
+        enrollment,
       });
     }
 
-    // Create pending request
-    const enrollment = await Enrollment.create({
-      studentId,
-      courseId,
-      status: "pending",
-    });
+    // Already pending
+    if (existingEnrollment.status === "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Your enrollment request is already pending.",
+      });
+    }
 
-    res.status(201).json({
-      success: true,
-      message:
-        "Enrollment request submitted successfully. Waiting for admin approval.",
-      enrollment,
+    // Already approved
+    if (existingEnrollment.status === "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "You are already enrolled in this course.",
+      });
+    }
+
+    // Previously rejected → allow re-application
+    if (existingEnrollment.status === "rejected") {
+      existingEnrollment.status = "pending";
+      existingEnrollment.requestedAt = new Date();
+
+      // Clear previous approval information
+      existingEnrollment.approvedAt = undefined;
+      existingEnrollment.approvedBy = undefined;
+
+      await existingEnrollment.save();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Enrollment request resubmitted successfully. Waiting for admin approval.",
+        enrollment: existingEnrollment,
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: "Unable to submit enrollment request.",
     });
   } catch (error) {
     res.status(500).json({
@@ -62,9 +96,7 @@ export const enrollCourse = async (req, res) => {
   }
 };
 
-// @desc    Get Student Approved Courses
-// @route   GET /api/enrollment/mycourses
-// @access  Private (Student)
+
 export const getMyCourses = async (req, res) => {
   try {
     const courses = await Enrollment.find({
