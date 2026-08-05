@@ -3,7 +3,10 @@ import Course from "../models/Course.js";
 import Lesson from "../models/Lesson.js";
 import Progress from "../models/Progress.js";
 
-
+// =====================================================
+// Student - Request Enrollment
+// @route POST /api/enrollment
+// =====================================================
 export const enrollCourse = async (req, res) => {
   try {
     const studentId = req.user._id;
@@ -73,7 +76,7 @@ export const enrollCourse = async (req, res) => {
 
     // =================================================
     // Rejected OR Revoked
-    // Allow student to request enrollment again
+    // Allow student to request again
     // =================================================
     if (
       existingEnrollment.status === "rejected" ||
@@ -115,11 +118,30 @@ export const enrollCourse = async (req, res) => {
   }
 };
 
+// =====================================================
+// Student - Get Approved Courses
+// @route GET /api/enrollment/mycourses
+// =====================================================
+export const getMyCourses = async (req, res) => {
+  try {
+    const courses = await Enrollment.find({
+      studentId: req.user._id,
+      status: "approved",
+    }).populate("courseId");
 
+    res.status(200).json(courses);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
-// @desc    Get Student Enrollment Requests
-// @route   GET /api/enrollment/myrequests
-// @access  Private (Student)
+// =====================================================
+// Student - Get Enrollment Requests
+// @route GET /api/enrollment/myrequests
+// =====================================================
 export const getMyEnrollmentRequests = async (req, res) => {
   try {
     const requests = await Enrollment.find({
@@ -137,9 +159,10 @@ export const getMyEnrollmentRequests = async (req, res) => {
   }
 };
 
-// @desc    Mentor - Get Students of Course
-// @route   GET /api/enrollment/course/:courseId/students
-// @access  Private (Mentor/Admin)
+// =====================================================
+// Mentor - Get Students of Course
+// @route GET /api/enrollment/course/:courseId/students
+// =====================================================
 export const getCourseStudents = async (req, res) => {
   try {
     const { courseId } = req.params;
