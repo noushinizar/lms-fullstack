@@ -16,7 +16,7 @@ const enrollmentSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: ["pending", "approved", "rejected", "revoked"],
       default: "pending",
     },
 
@@ -33,13 +33,23 @@ const enrollmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+
+    // Revoke information
+    revokedAt: {
+      type: Date,
+    },
+
+    revokedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Prevent duplicate enrollment requests
+// Prevent duplicate enrollment records
 enrollmentSchema.index(
   { studentId: 1, courseId: 1 },
   { unique: true }

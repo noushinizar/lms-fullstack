@@ -53,6 +53,15 @@ export const rejectEnrollment = async (id) => {
   return data;
 };
 
+// Revoke / Remove Student
+export const revokeEnrollment = async (id) => {
+  const { data } = await api.put(
+    `/admin/enrollments/${id}/revoke`
+  );
+
+  return data;
+};
+
 // ================================
 // Mentor
 // ================================

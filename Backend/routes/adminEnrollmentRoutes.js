@@ -7,6 +7,7 @@ import {
   getEnrollmentRequests,
   approveEnrollment,
   rejectEnrollment,
+  revokeEnrollment,
 } from "../controllers/adminEnrollmentController.js";
 
 const router = express.Router();
@@ -19,5 +20,7 @@ router.get("/", getEnrollmentRequests);
 router.put("/:id/approve", approveEnrollment);
 
 router.put("/:id/reject", rejectEnrollment);
+
+router.put("/:id/revoke", revokeEnrollment);
 
 export default router;

@@ -32,7 +32,9 @@ export const enrollCourse = async (req, res) => {
       courseId,
     });
 
-    // No previous request
+    // =================================================
+    // No previous enrollment
+    // =================================================
     if (!existingEnrollment) {
       const enrollment = await Enrollment.create({
         studentId,
@@ -49,7 +51,9 @@ export const enrollCourse = async (req, res) => {
       });
     }
 
+    // =================================================
     // Already pending
+    // =================================================
     if (existingEnrollment.status === "pending") {
       return res.status(400).json({
         success: false,
@@ -57,7 +61,9 @@ export const enrollCourse = async (req, res) => {
       });
     }
 
+    // =================================================
     // Already approved
+    // =================================================
     if (existingEnrollment.status === "approved") {
       return res.status(400).json({
         success: false,
@@ -65,14 +71,24 @@ export const enrollCourse = async (req, res) => {
       });
     }
 
-    // Previously rejected → allow re-application
-    if (existingEnrollment.status === "rejected") {
+    // =================================================
+    // Rejected OR Revoked
+    // Allow student to request enrollment again
+    // =================================================
+    if (
+      existingEnrollment.status === "rejected" ||
+      existingEnrollment.status === "revoked"
+    ) {
       existingEnrollment.status = "pending";
       existingEnrollment.requestedAt = new Date();
 
       // Clear previous approval information
       existingEnrollment.approvedAt = undefined;
       existingEnrollment.approvedBy = undefined;
+
+      // Clear previous revoke information
+      existingEnrollment.revokedAt = undefined;
+      existingEnrollment.revokedBy = undefined;
 
       await existingEnrollment.save();
 
@@ -84,6 +100,9 @@ export const enrollCourse = async (req, res) => {
       });
     }
 
+    // =================================================
+    // Fallback
+    // =================================================
     return res.status(400).json({
       success: false,
       message: "Unable to submit enrollment request.",
@@ -97,21 +116,6 @@ export const enrollCourse = async (req, res) => {
 };
 
 
-export const getMyCourses = async (req, res) => {
-  try {
-    const courses = await Enrollment.find({
-      studentId: req.user._id,
-      status: "approved",
-    }).populate("courseId");
-
-    res.status(200).json(courses);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
 
 // @desc    Get Student Enrollment Requests
 // @route   GET /api/enrollment/myrequests
