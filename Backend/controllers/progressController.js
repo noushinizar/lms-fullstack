@@ -1,7 +1,9 @@
 import Progress from "../models/Progress.js";
 import Lesson from "../models/Lesson.js";
 import LessonProgress from "../models/LessonProgress.js";
+import Enrollment from "../models/Enrollment.js";
 import { updateCourseProgress } from "../services/progress/progressService.js";
+
 
 export const markLessonComplete = async (req, res) => {
   try {
