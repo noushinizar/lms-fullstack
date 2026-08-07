@@ -8,6 +8,23 @@ export const markLessonComplete = async (req, res) => {
     const studentId = req.user._id;
     const { courseId, lessonId } = req.body;
 
+    // ==========================================
+    // Check approved enrollment
+    // ==========================================
+
+    const enrollment = await Enrollment.findOne({
+      studentId,
+      courseId,
+      status: "approved",
+    });
+
+    if (!enrollment) {
+      return res.status(403).json({
+        message:
+          "You are not approved to access this course.",
+      });
+    }
+
     // Find student's progress for this course
     let progress = await Progress.findOne({
       studentId,
@@ -22,58 +39,64 @@ export const markLessonComplete = async (req, res) => {
         completedLessons: [lessonId],
       });
 
-      // Save lesson completion history
       await LessonProgress.create({
         studentId,
         courseId,
         lessonId,
       });
-
     } else {
-
-      // Check if lesson already completed
-      const alreadyCompleted = progress.completedLessons.some(
-        (id) => id.toString() === lessonId
-      );
+      const alreadyCompleted =
+        progress.completedLessons.some(
+          (id) => id.toString() === lessonId
+        );
 
       if (!alreadyCompleted) {
-
-        // Update Progress model
         progress.completedLessons.push(lessonId);
+
         await progress.save();
 
-        // Save lesson history for Recent Activity
         await LessonProgress.create({
           studentId,
           courseId,
           lessonId,
         });
-
       }
     }
 
-    // Update overall course progress
     await updateCourseProgress(studentId, courseId);
 
     res.json({
       message: "Lesson completed successfully.",
       progress,
     });
-
   } catch (error) {
-
     res.status(500).json({
       message: error.message,
     });
-
   }
 };
 
 export const getProgress = async (req, res) => {
   try {
-
     const studentId = req.user._id;
     const courseId = req.params.courseId;
+
+    // ==========================================
+    // Check approved enrollment
+    // ==========================================
+
+    const enrollment = await Enrollment.findOne({
+      studentId,
+      courseId,
+      status: "approved",
+    });
+
+    if (!enrollment) {
+      return res.status(403).json({
+        message:
+          "You are not approved to access this course.",
+      });
+    }
 
     const progress = await Progress.findOne({
       studentId,
@@ -99,12 +122,9 @@ export const getProgress = async (req, res) => {
       completedLessons:
         progress?.completedLessons || [],
     });
-
   } catch (error) {
-
     res.status(500).json({
       message: error.message,
     });
-
   }
 };

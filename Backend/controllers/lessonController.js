@@ -1,5 +1,6 @@
 import Lesson from "../models/Lesson.js";
 import Progress from "../models/Progress.js";
+import Enrollment from "../models/Enrollment.js";
 
 export const createLesson = async (req, res) => {
   try {
@@ -123,21 +124,41 @@ export const getLessonById = async (req, res) => {
       });
     }
 
-    // Only students need lesson-lock validation
+    // ==========================================
+    // Check course enrollment for students
+    // ==========================================
+
     if (req.user.role === "student") {
-      // Get all lessons of this course
+      const enrollment = await Enrollment.findOne({
+        studentId: req.user._id,
+        courseId: lesson.courseId,
+        status: "approved",
+      });
+
+      if (!enrollment) {
+        return res.status(403).json({
+          message:
+            "You are not approved to access this course.",
+        });
+      }
+    }
+
+    // ==========================================
+    // Lesson lock logic
+    // ==========================================
+
+    if (req.user.role === "student") {
       const lessons = await Lesson.find({
         courseId: lesson.courseId,
       }).sort({ order: 1 });
 
-      // Find current lesson position
       const currentIndex = lessons.findIndex(
-        (item) => item._id.toString() === lesson._id.toString()
+        (item) =>
+          item._id.toString() === lesson._id.toString()
       );
 
-      // First lesson is always unlocked
+      // First lesson is unlocked
       if (currentIndex > 0) {
-        // Get student progress
         const progress = await Progress.findOne({
           studentId: req.user._id,
           courseId: lesson.courseId,
@@ -148,7 +169,6 @@ export const getLessonById = async (req, res) => {
             id.toString()
           ) || [];
 
-        // Previous lesson
         const previousLessonId =
           lessons[currentIndex - 1]._id.toString();
 
@@ -162,7 +182,6 @@ export const getLessonById = async (req, res) => {
     }
 
     res.json(lesson);
-
   } catch (error) {
     res.status(500).json({
       message: error.message,

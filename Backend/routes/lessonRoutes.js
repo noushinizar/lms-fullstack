@@ -9,19 +9,43 @@ import {
 } from "../controllers/lessonController.js";
 
 import protect from "../middleware/authMiddleware.js";
-
 import authorizeRoles from "../middleware/roleMiddleware.js";
+import checkEnrollment from "../middleware/enrollmentMiddleware.js";
 
 const router = express.Router();
 
-router.post("/", protect, authorizeRoles("admin", "mentor"), createLesson);
+router.post(
+  "/",
+  protect,
+  authorizeRoles("admin", "mentor"),
+  createLesson
+);
 
-router.put("/:id", protect, authorizeRoles("admin", "mentor"), updateLesson);
+router.put(
+  "/:id",
+  protect,
+  authorizeRoles("admin", "mentor"),
+  updateLesson
+);
 
-router.delete("/:id", protect, authorizeRoles("admin", "mentor"), deleteLesson);
+router.delete(
+  "/:id",
+  protect,
+  authorizeRoles("admin", "mentor"),
+  deleteLesson
+);
 
-router.get("/single/:lessonId", protect, getLessonById);
+router.get(
+  "/single/:lessonId",
+  protect,
+  getLessonById
+);
 
-router.get("/:courseId", protect, getLessons);
+router.get(
+  "/:courseId",
+  protect,
+  checkEnrollment,
+  getLessons
+);
 
 export default router;
