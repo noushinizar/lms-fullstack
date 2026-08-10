@@ -118,20 +118,37 @@ export const updateCourse = async (req, res) => {
       });
     }
 
-    course.title = req.body.title || course.title;
+    if (req.body.title !== undefined) {
+      course.title = req.body.title;
+    }
 
-    course.description = req.body.description || course.description;
+    if (req.body.description !== undefined) {
+      course.description = req.body.description;
+    }
 
-    course.price = req.body.price || course.price;
+    if (req.body.price !== undefined) {
+      course.price = req.body.price;
+    }
 
-    course.thumbnail = req.body.thumbnail || course.thumbnail;
+    if (req.body.thumbnail !== undefined) {
+      course.thumbnail = req.body.thumbnail;
+    }
 
-    course.category = req.body.category || course.category;
+    if (req.body.category !== undefined) {
+      course.category = req.body.category;
+    }
+
+    // Update assigned mentor
+    if (req.body.mentor !== undefined) {
+      course.mentor = req.body.mentor;
+    }
 
     const updatedCourse = await course.save();
 
     res.json(updatedCourse);
   } catch (error) {
+    console.error("Update Course Error:", error);
+
     res.status(500).json({
       message: error.message,
     });
