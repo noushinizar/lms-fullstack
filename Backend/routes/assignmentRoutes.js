@@ -2,6 +2,7 @@ import express from "express";
 
 import protect from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/roleMiddleware.js";
+import checkEnrollment from "../middleware/enrollmentMiddleware.js";
 
 import {
   createAssignment,
@@ -25,6 +26,7 @@ router.post(
 router.get(
   "/course/:courseId",
   protect,
+  checkEnrollment,
   getAssignments
 );
 

@@ -1,5 +1,5 @@
 import Assignment from "../models/Assignment.js";
-
+import Enrollment from "../models/Enrollment.js";
 // Create Assignment
 export const createAssignment = async (req, res) => {
   try {
@@ -46,7 +46,6 @@ export const getAssignments = async (req, res) => {
 // Get Single Assignment
 export const getAssignmentById = async (req, res) => {
   try {
-
     const assignment = await Assignment.findById(
       req.params.assignmentId
     );
@@ -57,14 +56,27 @@ export const getAssignmentById = async (req, res) => {
       });
     }
 
+    // Check course enrollment for students
+    if (req.user.role === "student") {
+      const enrollment = await Enrollment.findOne({
+        studentId: req.user._id,
+        courseId: assignment.courseId,
+        status: "approved",
+      });
+
+      if (!enrollment) {
+        return res.status(403).json({
+          message: "You are not approved to access this course.",
+        });
+      }
+    }
+
     res.json(assignment);
 
   } catch (error) {
-
     res.status(500).json({
       message: error.message,
     });
-
   }
 };
 
