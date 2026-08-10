@@ -6,12 +6,22 @@ import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import Quiz from "../models/Quiz.js";
 
 export const getDashboardData = async (mentorId) => {
+  // =====================================================
   // Mentor Courses
-  const courses = await Course.find({ mentor: mentorId });
+  // =====================================================
 
-  const courseIds = courses.map((course) => course._id);
+  const courses = await Course.find({
+    mentor: mentorId,
+  });
 
+  const courseIds = courses.map(
+    (course) => course._id
+  );
+
+  // =====================================================
   // Statistics
+  // =====================================================
+
   const totalCourses = courses.length;
 
   const totalLessons = await Lesson.countDocuments({
@@ -22,18 +32,27 @@ export const getDashboardData = async (mentorId) => {
     courseId: { $in: courseIds },
   });
 
-  const pendingReviews = await AssignmentSubmission.countDocuments({
-    status: "Pending",
-    assignmentId: {
-      $in: (
-        await Assignment.find({
-          courseId: { $in: courseIds },
-        }).select("_id")
-      ).map((assignment) => assignment._id),
-    },
-  });
+  // Get assignments belonging to mentor's courses
+  const mentorAssignments = await Assignment.find({
+    courseId: { $in: courseIds },
+  }).select("_id");
 
+  const assignmentIds = mentorAssignments.map(
+    (assignment) => assignment._id
+  );
+
+  const pendingReviews =
+    await AssignmentSubmission.countDocuments({
+      status: "Pending",
+      assignmentId: {
+        $in: assignmentIds,
+      },
+    });
+
+  // =====================================================
   // Assigned Courses
+  // =====================================================
+
   const assignedCourses = await Promise.all(
     courses.map(async (course) => {
       const students = await Enrollment.countDocuments({
@@ -54,28 +73,40 @@ export const getDashboardData = async (mentorId) => {
     })
   );
 
+  // =====================================================
   // Recent Lessons
+  // =====================================================
+
   const recentLessons = await Lesson.find({
     courseId: { $in: courseIds },
   })
     .sort({ createdAt: -1 })
     .limit(3);
 
+  // =====================================================
   // Recent Assignments
+  // =====================================================
+
   const recentAssignments = await Assignment.find({
     courseId: { $in: courseIds },
   })
     .sort({ createdAt: -1 })
     .limit(3);
 
+  // =====================================================
   // Recent Quizzes
+  // =====================================================
+
   const recentQuizzes = await Quiz.find({
     courseId: { $in: courseIds },
   })
     .sort({ createdAt: -1 })
     .limit(3);
 
+  // =====================================================
   // Recent Activity
+  // =====================================================
+
   const recentActivity = [
     ...recentLessons.map((lesson) => ({
       type: "lesson",
@@ -95,24 +126,39 @@ export const getDashboardData = async (mentorId) => {
       date: quiz.createdAt,
     })),
   ]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .sort(
+      (a, b) =>
+        new Date(b.date) - new Date(a.date)
+    )
     .slice(0, 5);
 
+  // =====================================================
   // Pending Reviews
-  const pendingAssignments = await AssignmentSubmission.find({
-    status: "Pending",
-  })
-    .populate("studentId", "name")
-    .populate({
-      path: "assignmentId",
-      select: "title courseId",
-      populate: {
-        path: "courseId",
-        select: "title",
+  // ONLY submissions from mentor's courses
+  // =====================================================
+
+  const pendingAssignments =
+    await AssignmentSubmission.find({
+      status: "Pending",
+      assignmentId: {
+        $in: assignmentIds,
       },
     })
-    .sort({ createdAt: -1 })
-    .limit(5);
+      .populate("studentId", "name")
+      .populate({
+        path: "assignmentId",
+        select: "title courseId",
+        populate: {
+          path: "courseId",
+          select: "title mentor",
+        },
+      })
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+  // =====================================================
+  // Return Dashboard Data
+  // =====================================================
 
   return {
     totalCourses,

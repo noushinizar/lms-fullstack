@@ -111,6 +111,30 @@ export const getMySubmissions = async (req, res) => {
 // =====================================================
 export const getAssignmentSubmissions = async (req, res) => {
   try {
+    const assignment = await Assignment.findById(
+      req.params.assignmentId
+    ).populate("courseId", "mentor");
+
+    if (!assignment) {
+      return res.status(404).json({
+        message: "Assignment not found.",
+      });
+    }
+
+    // Mentor access restriction
+    if (req.user.role === "mentor") {
+      if (
+        !assignment.courseId ||
+        assignment.courseId.mentor?.toString() !==
+          req.user._id.toString()
+      ) {
+        return res.status(403).json({
+          message:
+            "You are not assigned to this course.",
+        });
+      }
+    }
+
     const submissions = await AssignmentSubmission.find({
       assignmentId: req.params.assignmentId,
     })
@@ -137,6 +161,9 @@ export const getAssignmentSubmissions = async (req, res) => {
 // =====================================================
 // Mentor/Admin - Review Submission
 // =====================================================
+// =====================================================
+// Mentor/Admin - Review Submission
+// =====================================================
 export const reviewSubmission = async (req, res) => {
   try {
     const { marksObtained, feedback } = req.body;
@@ -149,6 +176,30 @@ export const reviewSubmission = async (req, res) => {
       return res.status(404).json({
         message: "Submission not found.",
       });
+    }
+
+    const assignment = await Assignment.findById(
+      submission.assignmentId
+    ).populate("courseId", "mentor");
+
+    if (!assignment) {
+      return res.status(404).json({
+        message: "Assignment not found.",
+      });
+    }
+
+    // Mentor access restriction
+    if (req.user.role === "mentor") {
+      if (
+        !assignment.courseId ||
+        assignment.courseId.mentor?.toString() !==
+          req.user._id.toString()
+      ) {
+        return res.status(403).json({
+          message:
+            "You are not assigned to this course.",
+        });
+      }
     }
 
     submission.marksObtained = marksObtained;
