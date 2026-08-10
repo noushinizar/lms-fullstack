@@ -13,7 +13,8 @@ export const submitAssignment = async (data) => {
 // Student - Get all my submissions
 export const getMySubmissions = async () => {
   const response = await api.get("/submissions/my");
-  return response.data;
+
+  return response.data.submissions;
 };
 
 // Student - Get my submission for one assignment
@@ -25,7 +26,7 @@ export const getMySubmission = async (assignmentId) => {
   return response.data;
 };
 
-// Mentor
+// Mentor - Get submissions of an assignment
 export const getAssignmentSubmissions = async (
   assignmentId
 ) => {
@@ -37,7 +38,6 @@ export const getAssignmentSubmissions = async (
 };
 
 // Review Assignment
-
 export const reviewSubmission = async (
   submissionId,
   reviewData
