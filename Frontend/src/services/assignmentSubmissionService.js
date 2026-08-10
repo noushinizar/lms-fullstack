@@ -34,7 +34,7 @@ export const getAssignmentSubmissions = async (
     `/submissions/assignment/${assignmentId}`
   );
 
-  return response.data;
+  return response.data.submissions;
 };
 
 // Review Assignment
