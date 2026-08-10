@@ -79,71 +79,27 @@ export const submitAssignment = async (req, res) => {
 // Student - My submissions
 export const getMySubmissions = async (req, res) => {
   try {
-    const assignment = await Assignment.findById(
-      req.params.assignmentId
-    );
-
-    if (!assignment) {
-      return res.status(404).json({
-        message: "Assignment not found.",
-      });
-    }
-
-    // Check course enrollment
-    const enrollment = await Enrollment.findOne({
-      studentId: req.user._id,
-      courseId: assignment.courseId,
-      status: "approved",
-    });
-
-    if (!enrollment) {
-      return res.status(403).json({
-        message: "You are not approved to access this course.",
-      });
-    }
-
-    const submission = await AssignmentSubmission.findOne({
-      assignmentId: req.params.assignmentId,
-      studentId: req.user._id,
-    });
-
-    if (!submission) {
-      return res.status(404).json({
-        message: "Submission not found.",
-      });
-    }
-
-    res.json(submission);
-
-  } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    });
-  }
-};
-
-
-// Mentor - View submissions of an assignment
-export const getAssignmentSubmissions = async (req, res) => {
-
-  try {
-
     const submissions = await AssignmentSubmission.find({
-      assignmentId: req.params.assignmentId,
+      studentId: req.user._id,
     })
-      .populate("studentId", "name email")
+      .populate(
+        "assignmentId",
+        "title description courseId dueDate"
+      )
       .sort({ createdAt: -1 });
 
-    res.json(submissions);
-
+    res.status(200).json({
+      success: true,
+      submissions,
+    });
   } catch (error) {
+    console.error("Get My Submissions Error:", error);
 
     res.status(500).json({
+      success: false,
       message: error.message,
     });
-
   }
-
 };
 
 
@@ -185,7 +141,6 @@ export const reviewSubmission = async (req, res) => {
 
 export const getMySubmission = async (req, res) => {
   try {
-
     const submission = await AssignmentSubmission.findOne({
       assignmentId: req.params.assignmentId,
       studentId: req.user._id,
@@ -198,12 +153,9 @@ export const getMySubmission = async (req, res) => {
     }
 
     res.json(submission);
-
   } catch (error) {
-
     res.status(500).json({
       message: error.message,
     });
-
   }
 };
