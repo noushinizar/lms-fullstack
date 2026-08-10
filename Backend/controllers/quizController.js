@@ -1,6 +1,7 @@
 import Quiz from "../models/Quiz.js";
 import Question from "../models/Question.js";
 import QuizResult from "../models/QuizResult.js";
+import Enrollment from "../models/Enrollment.js";
 import { updateCourseProgress } from "../services/progress/progressService.js";
 // Create Quiz
 export const createQuiz = async (req, res) => {
@@ -49,9 +50,7 @@ export const getQuizzes = async (req, res) => {
 
 // Get single quiz
 export const getQuizById = async (req, res) => {
-
   try {
-
     const quiz = await Quiz.findById(req.params.quizId);
 
     if (!quiz) {
@@ -60,16 +59,27 @@ export const getQuizById = async (req, res) => {
       });
     }
 
+    // Check course enrollment for students
+    if (req.user.role === "student") {
+      const enrollment = await Enrollment.findOne({
+        studentId: req.user._id,
+        courseId: quiz.courseId,
+        status: "approved",
+      });
+
+      if (!enrollment) {
+        return res.status(403).json({
+          message: "You are not approved to access this course.",
+        });
+      }
+    }
+
     res.json(quiz);
-
   } catch (error) {
-
     res.status(500).json({
       message: error.message,
     });
-
   }
-
 };
 
 // Update Quiz
@@ -141,17 +151,40 @@ export const deleteQuiz = async (req, res) => {
 export const submitQuiz = async (req, res) => {
   try {
     const { quizId, answers } = req.body;
-     const alreadySubmitted = await QuizResult.findOne({
-  quizId,
-  studentId: req.user._id,
-});
 
-if (alreadySubmitted) {
-  return res.status(400).json({
-    message: "You have already attempted this quiz.",
-  });
-}
+    // Check quiz exists
+    const quiz = await Quiz.findById(quizId);
 
+    if (!quiz) {
+      return res.status(404).json({
+        message: "Quiz not found.",
+      });
+    }
+
+    // Check course enrollment
+    const enrollment = await Enrollment.findOne({
+      studentId: req.user._id,
+      courseId: quiz.courseId,
+      status: "approved",
+    });
+
+    if (!enrollment) {
+      return res.status(403).json({
+        message: "You are not approved to access this course.",
+      });
+    }
+
+    // Check if already submitted
+    const alreadySubmitted = await QuizResult.findOne({
+      quizId,
+      studentId: req.user._id,
+    });
+
+    if (alreadySubmitted) {
+      return res.status(400).json({
+        message: "You have already attempted this quiz.",
+      });
+    }
 
     // Get all questions of this quiz
     const questions = await Question.find({ quizId });
@@ -175,7 +208,10 @@ if (alreadySubmitted) {
 
     const wrongAnswers = totalQuestions - correctAnswers;
 
-    const percentage = Math.round((score / totalMarks) * 100);
+    const percentage =
+      totalMarks > 0
+        ? Math.round((score / totalMarks) * 100)
+        : 0;
 
     const status = percentage >= 40 ? "PASS" : "FAIL";
 
@@ -186,33 +222,28 @@ if (alreadySubmitted) {
       score,
       totalQuestions,
     });
-      const quiz = await Quiz.findById(quizId);
 
-await updateCourseProgress(
-    req.user._id,
-    quiz.courseId
-);
+    // Update course progress
+    await updateCourseProgress(
+      req.user._id,
+      quiz.courseId
+    );
+
     res.json({
       message: "Quiz submitted successfully.",
 
-      // Marks
       score,
       totalMarks,
 
-      // Questions
       totalQuestions,
       correctAnswers,
       wrongAnswers,
 
-      // Performance
       percentage,
       status,
 
-      // Saved Result
       result,
     });
-  
-
   } catch (error) {
     res.status(500).json({
       message: error.message,
@@ -223,8 +254,27 @@ await updateCourseProgress(
 
 
 export const hasAttemptedQuiz = async (req, res) => {
-
   try {
+    const quiz = await Quiz.findById(req.params.quizId);
+
+    if (!quiz) {
+      return res.status(404).json({
+        message: "Quiz not found.",
+      });
+    }
+
+    // Check course enrollment
+    const enrollment = await Enrollment.findOne({
+      studentId: req.user._id,
+      courseId: quiz.courseId,
+      status: "approved",
+    });
+
+    if (!enrollment) {
+      return res.status(403).json({
+        message: "You are not approved to access this course.",
+      });
+    }
 
     const result = await QuizResult.findOne({
       quizId: req.params.quizId,
@@ -234,13 +284,9 @@ export const hasAttemptedQuiz = async (req, res) => {
     res.json({
       attempted: !!result,
     });
-
   } catch (error) {
-
     res.status(500).json({
       message: error.message,
     });
-
   }
-
 };

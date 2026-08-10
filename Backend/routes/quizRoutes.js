@@ -2,6 +2,7 @@ import express from "express";
 
 import protect from "../middleware/authMiddleware.js";
 import authorizeRoles from "../middleware/roleMiddleware.js";
+import checkEnrollment from "../middleware/enrollmentMiddleware.js";
 
 import {
   createQuiz,
@@ -17,7 +18,7 @@ const router = express.Router();
 
 router.post("/", protect, authorizeRoles("admin", "mentor"), createQuiz);
 
-router.get("/course/:courseId", protect, getQuizzes);
+router.get("/course/:courseId", protect, checkEnrollment, getQuizzes);
 
 router.get("/:quizId", protect, getQuizById);
 
@@ -29,16 +30,11 @@ router.delete(
   authorizeRoles("admin", "mentor"),
   deleteQuiz,
 );
-router.post(
-  "/submit",
-  protect,
-  authorizeRoles("student"),
-  submitQuiz
-);
+router.post("/submit", protect, authorizeRoles("student"), submitQuiz);
 router.get(
   "/:quizId/attempt-status",
   protect,
   authorizeRoles("student"),
-  hasAttemptedQuiz
+  hasAttemptedQuiz,
 );
 export default router;
