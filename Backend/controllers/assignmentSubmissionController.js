@@ -3,8 +3,9 @@ import Assignment from "../models/Assignment.js";
 import Enrollment from "../models/Enrollment.js";
 import { updateCourseProgress } from "../services/progress/progressService.js";
 
-
-// Student submits assignment
+// =====================================================
+// Student - Submit Assignment
+// =====================================================
 export const submitAssignment = async (req, res) => {
   try {
     const {
@@ -58,6 +59,7 @@ export const submitAssignment = async (req, res) => {
       notes,
     });
 
+    // Update course progress
     await updateCourseProgress(
       req.user._id,
       assignment.courseId
@@ -67,16 +69,18 @@ export const submitAssignment = async (req, res) => {
       message: "Assignment submitted successfully.",
       submission,
     });
-
   } catch (error) {
+    console.error("Submit Assignment Error:", error);
+
     res.status(500).json({
       message: error.message,
     });
   }
 };
 
-
-// Student - My submissions
+// =====================================================
+// Student - Get All My Submissions
+// =====================================================
 export const getMySubmissions = async (req, res) => {
   try {
     const submissions = await AssignmentSubmission.find({
@@ -102,9 +106,37 @@ export const getMySubmissions = async (req, res) => {
   }
 };
 
+// =====================================================
+// Mentor/Admin - Get All Submissions For Assignment
+// =====================================================
+export const getAssignmentSubmissions = async (req, res) => {
+  try {
+    const submissions = await AssignmentSubmission.find({
+      assignmentId: req.params.assignmentId,
+    })
+      .populate("studentId", "name email")
+      .sort({ createdAt: -1 });
 
-// Mentor Review Submission
+    res.status(200).json({
+      success: true,
+      submissions,
+    });
+  } catch (error) {
+    console.error(
+      "Get Assignment Submissions Error:",
+      error
+    );
 
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// =====================================================
+// Mentor/Admin - Review Submission
+// =====================================================
 export const reviewSubmission = async (req, res) => {
   try {
     const { marksObtained, feedback } = req.body;
@@ -115,7 +147,7 @@ export const reviewSubmission = async (req, res) => {
 
     if (!submission) {
       return res.status(404).json({
-        message: "Submission not found",
+        message: "Submission not found.",
       });
     }
 
@@ -125,20 +157,22 @@ export const reviewSubmission = async (req, res) => {
 
     await submission.save();
 
-    res.json({
+    res.status(200).json({
       message: "Submission reviewed successfully.",
       submission,
     });
-
   } catch (error) {
+    console.error("Review Submission Error:", error);
+
     res.status(500).json({
       message: error.message,
     });
   }
 };
 
-// Student - Get my submission for a particular assignment
-
+// =====================================================
+// Student - Get My Submission For One Assignment
+// =====================================================
 export const getMySubmission = async (req, res) => {
   try {
     const submission = await AssignmentSubmission.findOne({
@@ -152,8 +186,10 @@ export const getMySubmission = async (req, res) => {
       });
     }
 
-    res.json(submission);
+    res.status(200).json(submission);
   } catch (error) {
+    console.error("Get My Submission Error:", error);
+
     res.status(500).json({
       message: error.message,
     });

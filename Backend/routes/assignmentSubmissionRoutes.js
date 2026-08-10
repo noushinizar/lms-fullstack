@@ -10,13 +10,10 @@ import {
   reviewSubmission,
   getMySubmission,
 } from "../controllers/assignmentSubmissionController.js";
+
 const router = express.Router();
 
-/* ===========================
-   Student Routes
-=========================== */
-
-// Submit Assignment
+// Student
 router.post(
   "/",
   protect,
@@ -24,7 +21,6 @@ router.post(
   submitAssignment
 );
 
-// Get My Submissions
 router.get(
   "/my",
   protect,
@@ -32,11 +28,7 @@ router.get(
   getMySubmissions
 );
 
-/* ===========================
-   Mentor/Admin Routes
-=========================== */
-
-// Get all submissions of an assignment
+// Mentor/Admin
 router.get(
   "/assignment/:assignmentId",
   protect,
@@ -44,7 +36,6 @@ router.get(
   getAssignmentSubmissions
 );
 
-// Review a submission
 router.put(
   "/:id/review",
   protect,
@@ -52,6 +43,7 @@ router.put(
   reviewSubmission
 );
 
+// Student - specific assignment
 router.get(
   "/my/:assignmentId",
   protect,
