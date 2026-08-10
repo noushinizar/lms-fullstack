@@ -34,11 +34,12 @@ function DashboardHero() {
   });
 
   return (
+     <div className="rounded-3xl bg-linear-to-r from-orange-500 via-amber-500 to-yellow-400 p-10 text-white shadow-xl">
     <div className="flex justify-between items-start">
       <div>
         {/* Greeting */}
         <h1 className="text-5xl font-bold">
-          {greeting}, {user?.name || "Admin"} 👋
+          {greeting}, {user?.name || "Admin"} 
         </h1>
 
         {/* Description */}
@@ -66,6 +67,7 @@ function DashboardHero() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
