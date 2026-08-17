@@ -18,6 +18,11 @@ const pageTitles = {
     subtitle: "Continue your enrolled courses.",
   },
 
+    "/student/course/:id": {
+    title: "Explore your Learning",
+    subtitle: "Explore your lessons,assignments,quiz and progress.",
+  },
+  
    "/student/course/:id/lessons": {
     title: "Lessons",
     subtitle: "Access and complete your course lessons.",
