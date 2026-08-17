@@ -10,7 +10,7 @@ import {
   FaChalkboardTeacher,
 } from "react-icons/fa";
 
-import illustration from "../../assets/login-illustration.png";
+import illustration from "../../assets/illustration.png";
 import { showError, showSuccess } from "../../utils/toast";
 
 function ForgotPassword() {
@@ -50,7 +50,7 @@ function ForgotPassword() {
             className="w-full max-w-lg mx-auto"
           />
 
-          <h1 className="text-5xl font-bold text-gray-800 mt-8">
+          {/* <h1 className="text-5xl font-bold text-gray-800 mt-8">
             Reset Your
             <span className="text-amber-600"> Password</span>
           </h1>
@@ -77,7 +77,7 @@ function ForgotPassword() {
               <span>Protected Account Access</span>
             </div>
 
-          </div>
+          </div> */}
 
         </div>
 

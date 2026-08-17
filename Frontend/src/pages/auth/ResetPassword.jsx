@@ -12,7 +12,7 @@ import {
   FaUserGraduate,
 } from "react-icons/fa";
 
-import illustration from "../../assets/login-illustration.png";
+import illustration from "../../assets/illustration.png";
 import { showError, showSuccess, showWarning } from "../../utils/toast";
 
 function ResetPassword() {
