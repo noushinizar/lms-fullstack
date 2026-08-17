@@ -6,6 +6,8 @@ import {
   FaPhoneAlt,
   FaLock,
   FaArrowRight,
+  FaEye,
+  FaEyeSlash
 } from "react-icons/fa";
 
 import illustration from "../../assets/illustration.png";
@@ -25,7 +27,7 @@ function Register() {
     phone: "",
     password: "",
   });
-
+  const[showPassword,setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [errors, setErrors] = useState({});
@@ -361,14 +363,21 @@ function Register() {
                 <FaLock className="text-amber-600 mr-4" />
 
                 <input
-                  type="password"
+                  type={showPassword ? "text":"password"}
                   name="password"
                   placeholder="Password"
                   value={formData.password}
                   onChange={handleChange}
                   className="w-full bg-transparent outline-none"
                 />
+               <button
+                 type="button"
+                 onClick={()=> setShowPassword(!showPassword)}
+                 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+               >
 
+               {showPassword ? <FaEyeSlash/> : <FaEye/>}
+               </button>
               </div>
 
               {errors.password && (
@@ -404,13 +413,20 @@ function Register() {
                 <FaLock className="text-amber-600 mr-4" />
 
                 <input
-                  type="password"
+                  type={showPassword ? "text":"password"}
                   placeholder="Confirm Password"
                   value={confirmPassword}
                   onChange={handleConfirmPasswordChange}
                   className="w-full bg-transparent outline-none"
                 />
+                   <button
+                 type="button"
+                 onClick={()=> setShowPassword(!showPassword)}
+                 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+               >
 
+               {showPassword ? <FaEyeSlash/> : <FaEye/>}
+               </button>
               </div>
 
               {errors.confirmPassword && (

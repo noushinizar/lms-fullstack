@@ -4,6 +4,8 @@ import {
   FaEnvelope,
   FaLock,
   FaArrowRight,
+  FaEye,
+  FaEyeSlash
 } from "react-icons/fa";
 
 import illustration from "../../assets/illustration.png";
@@ -15,18 +17,15 @@ import { showError } from "../../utils/toast";
 function Login() {
   const navigate = useNavigate();
   const { login } = useContext(AuthContext);
-
+   
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
-
+  const [showPassword,setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // =========================
-  // HANDLE INPUT CHANGE
-  // =========================
-
+  
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -211,13 +210,21 @@ function Login() {
                 <FaLock className="text-amber-600 mr-4" />
 
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   name="password"
                   placeholder="Password"
                   value={formData.password}
                   onChange={handleChange}
                   className="w-full bg-transparent outline-none"
                 />
+
+                <Button 
+                type="button"
+                onClick={()=>setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                 {showPassword ? <FaEyeSlash/> : <FaEye/>}
+                </Button>
 
               </div>
 
