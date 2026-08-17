@@ -17,32 +17,31 @@ const pageTitles = {
     title: "My Learning",
     subtitle: "Continue your enrolled courses.",
   },
-
-    "/student/course/:id": {
-    title: "Explore your Learning",
-    subtitle: "Explore your lessons,assignments,quiz and progress.",
-  },
   
-   "/student/course/:id/lessons": {
-    title: "Lessons",
-    subtitle: "Access and complete your course lessons.",
-  },
+"/student/course/:id": {
+  title: "Explore Your Learning",
+  subtitle: "Explore your lessons, assignments, quizzes, and progress.",
+},
 
-  "/student/course/:id/quizzes": {
-    title: "Quizzes",
-    subtitle: "Take quizzes and test your knowledge.",
-  },
+"/student/course/:id/lessons": {
+  title: "Lessons",
+  subtitle: "Access and complete your course lessons.",
+},
 
-  "/student/course/:id/assignments": {
-    title: "Assignments",
-    subtitle: "View and submit your course assignments.",
-  },
+"/student/course/:id/assignments": {
+  title: "Assignments",
+  subtitle: "View and submit your course assignments.",
+},
 
-  "/student/course/:id/progress": {
-    title: "Progress",
-    subtitle: "Track your learning progress in this course.",
-  },
+"/student/course/:id/quizzes": {
+  title: "Quizzes",
+  subtitle: "Take quizzes and test your knowledge.",
+},
 
+"/student/course/:id/progress": {
+  title: "Progress",
+  subtitle: "Track your learning progress in this course.",
+},
   "/student/my-submissions": {
     title: "My Submissions",
     subtitle: "Track your submitted assignments.",
