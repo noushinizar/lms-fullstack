@@ -83,7 +83,7 @@ function ResetPassword() {
             className="w-full max-w-lg mx-auto"
           />
 
-          <h1 className="text-5xl font-bold text-gray-800 mt-8">
+          {/* <h1 className="text-5xl font-bold text-gray-800 mt-8">
             Create a
             <span className="text-amber-600"> New Password</span>
           </h1>
@@ -109,7 +109,7 @@ function ResetPassword() {
               <span>Your Progress Stays Safe</span>
             </div>
 
-          </div>
+          </div> */}
 
         </div>
 

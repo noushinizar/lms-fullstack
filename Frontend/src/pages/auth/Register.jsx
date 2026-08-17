@@ -6,14 +6,15 @@ import {
   FaPhoneAlt,
   FaLock,
   FaArrowRight,
-  FaUserGraduate,
-  FaCertificate,
-  FaChalkboardTeacher,
 } from "react-icons/fa";
 
 import illustration from "../../assets/illustration.png";
+
 import { registerUser } from "../../services/authService";
-import { showError, showSuccess, showWarning } from "../../utils/toast";
+import {
+  showError,
+  showSuccess,
+} from "../../utils/toast";
 
 function Register() {
   const navigate = useNavigate();
@@ -27,28 +28,147 @@ function Register() {
 
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  const [errors, setErrors] = useState({});
+
+  // =========================
+  // HANDLE INPUT CHANGE
+  // =========================
+
   const handleChange = (e) => {
+    const { name, value } = e.target;
+
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: value,
     });
+
+    if (errors[name]) {
+      setErrors({
+        ...errors,
+        [name]: "",
+      });
+    }
   };
+
+  // =========================
+  // HANDLE CONFIRM PASSWORD
+  // =========================
+
+  const handleConfirmPasswordChange = (e) => {
+    const value = e.target.value;
+
+    setConfirmPassword(value);
+
+    if (errors.confirmPassword) {
+      setErrors({
+        ...errors,
+        confirmPassword: "",
+      });
+    }
+  };
+
+  // =========================
+  // VALIDATE FORM
+  // =========================
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    const name = formData.name.trim();
+    const email = formData.email.trim();
+    const phone = formData.phone.trim();
+    const password = formData.password;
+
+    // =========================
+    // NAME
+    // =========================
+
+    if (!name) {
+      newErrors.name = "Full name is required.";
+    } else if (name.length < 2) {
+      newErrors.name =
+        "Name must be at least 2 characters.";
+    }
+
+    // =========================
+    // EMAIL
+    // =========================
+
+    if (!email) {
+      newErrors.email = "Email address is required.";
+    } else if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      newErrors.email =
+        "Please enter a valid email address.";
+    }
+
+    // =========================
+    // PHONE
+    // =========================
+
+    if (phone) {
+      if (!/^[0-9]{10}$/.test(phone)) {
+        newErrors.phone =
+          "Phone number must contain exactly 10 digits.";
+      }
+    }
+
+    // =========================
+    // PASSWORD
+    // =========================
+
+    if (!password) {
+      newErrors.password = "Password is required.";
+    } else if (password.length < 6) {
+      newErrors.password =
+        "Password must be at least 6 characters.";
+    }
+
+    // =========================
+    // CONFIRM PASSWORD
+    // =========================
+
+    if (!confirmPassword) {
+      newErrors.confirmPassword =
+        "Please confirm your password.";
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword =
+        "Passwords do not match.";
+    }
+
+    setErrors(newErrors);
+
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // =========================
+  // SUBMIT
+  // =========================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (formData.password !== confirmPassword) {
-      return showWarning("Passwords do not match");
+    if (!validateForm()) {
+      return;
     }
 
     try {
-      await registerUser(formData);
+      await registerUser({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        password: formData.password,
+      });
 
       showSuccess("Registration Successful");
 
       navigate("/login");
     } catch (error) {
-      showError(error.response?.data?.message || "Registration Failed");
+      showError(
+        error.response?.data?.message ||
+          "Registration Failed"
+      );
     }
   };
 
@@ -57,7 +177,7 @@ function Register() {
 
       <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-12 items-center">
 
-        {/* Left Side */}
+        {/* ================= LEFT ================= */}
 
         <div className="hidden lg:block">
 
@@ -67,38 +187,9 @@ function Register() {
             className="w-full max-w-lg mx-auto"
           />
 
-          {/* <h1 className="text-5xl font-bold text-gray-800 mt-8">
-            Start Your
-            <span className="text-amber-600"> Learning Journey</span>
-          </h1>
-
-          <p className="mt-6 text-lg text-gray-600 leading-8">
-            Join thousands of learners and build practical skills with
-            expert mentors and real-world projects.
-          </p>
-
-          <div className="mt-10 space-y-5">
-
-            <div className="flex items-center gap-3">
-              <FaUserGraduate className="text-amber-600 text-xl" />
-              <span>Hands-on Projects</span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <FaChalkboardTeacher className="text-amber-600 text-xl" />
-              <span>Expert Mentors</span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <FaCertificate className="text-amber-600 text-xl" />
-              <span>Course Certificates</span>
-            </div>
-
-          </div> */}
-
         </div>
 
-        {/* Right Side */}
+        {/* ================= RIGHT ================= */}
 
         <div className="bg-[#f9dcb5] rounded-[40px] p-10 shadow-[20px_20px_60px_#d6bb92,-20px_-20px_60px_#fff6e8]">
 
@@ -110,89 +201,247 @@ function Register() {
             Register and start learning today.
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
+          >
 
-            {/* Name */}
+            {/* ================= NAME ================= */}
 
-            <div className="flex items-center rounded-2xl px-5 py-4 bg-[#f9ead6] shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]">
-              <FaUser className="text-amber-600 mr-4" />
+            <div>
 
-              <input
-                type="text"
-                name="name"
-                placeholder="Full Name"
-                value={formData.name}
-                onChange={handleChange}
-                className="w-full bg-transparent outline-none"
-                required
-              />
+              <div
+                className={`
+                  flex
+                  items-center
+                  rounded-2xl
+                  px-5
+                  py-4
+                  bg-[#f9ead6]
+                  shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]
+                  border-2
+                  ${
+                    errors.name
+                      ? "border-red-500"
+                      : "border-transparent"
+                  }
+                `}
+              >
+
+                <FaUser className="text-amber-600 mr-4" />
+
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Full Name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full bg-transparent outline-none"
+                />
+
+              </div>
+
+              {errors.name && (
+                <p className="text-red-600 text-sm mt-2 ml-2">
+                  {errors.name}
+                </p>
+              )}
+
             </div>
 
-            {/* Email */}
+            {/* ================= EMAIL ================= */}
 
-            <div className="flex items-center rounded-2xl px-5 py-4 bg-[#f9ead6] shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]">
-              <FaEnvelope className="text-amber-600 mr-4" />
+            <div>
 
-              <input
-                type="email"
-                name="email"
-                placeholder="Email Address"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full bg-transparent outline-none"
-                required
-              />
+              <div
+                className={`
+                  flex
+                  items-center
+                  rounded-2xl
+                  px-5
+                  py-4
+                  bg-[#f9ead6]
+                  shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]
+                  border-2
+                  ${
+                    errors.email
+                      ? "border-red-500"
+                      : "border-transparent"
+                  }
+                `}
+              >
+
+                <FaEnvelope className="text-amber-600 mr-4" />
+
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="Email Address"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full bg-transparent outline-none"
+                />
+
+              </div>
+
+              {errors.email && (
+                <p className="text-red-600 text-sm mt-2 ml-2">
+                  {errors.email}
+                </p>
+              )}
+
             </div>
 
-            {/* Phone */}
+            {/* ================= PHONE ================= */}
 
-            <div className="flex items-center rounded-2xl px-5 py-4 bg-[#f9ead6] shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]">
-              <FaPhoneAlt className="text-amber-600 mr-4" />
+            <div>
 
-              <input
-                type="text"
-                name="phone"
-                placeholder="Phone Number"
-                value={formData.phone}
-                onChange={handleChange}
-                className="w-full bg-transparent outline-none"
-              />
+              <div
+                className={`
+                  flex
+                  items-center
+                  rounded-2xl
+                  px-5
+                  py-4
+                  bg-[#f9ead6]
+                  shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]
+                  border-2
+                  ${
+                    errors.phone
+                      ? "border-red-500"
+                      : "border-transparent"
+                  }
+                `}
+              >
+
+                <FaPhoneAlt className="text-amber-600 mr-4" />
+
+                <input
+                  type="tel"
+                  name="phone"
+                  placeholder="Phone Number"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  className="w-full bg-transparent outline-none"
+                  maxLength={10}
+                />
+
+              </div>
+
+              {errors.phone && (
+                <p className="text-red-600 text-sm mt-2 ml-2">
+                  {errors.phone}
+                </p>
+              )}
+
             </div>
 
-            {/* Password */}
+            {/* ================= PASSWORD ================= */}
 
-            <div className="flex items-center rounded-2xl px-5 py-4 bg-[#f9ead6] shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]">
-              <FaLock className="text-amber-600 mr-4" />
+            <div>
 
-              <input
-                type="password"
-                name="password"
-                placeholder="Password"
-                value={formData.password}
-                onChange={handleChange}
-                className="w-full bg-transparent outline-none"
-                required
-              />
+              <div
+                className={`
+                  flex
+                  items-center
+                  rounded-2xl
+                  px-5
+                  py-4
+                  bg-[#f9ead6]
+                  shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]
+                  border-2
+                  ${
+                    errors.password
+                      ? "border-red-500"
+                      : "border-transparent"
+                  }
+                `}
+              >
+
+                <FaLock className="text-amber-600 mr-4" />
+
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="Password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="w-full bg-transparent outline-none"
+                />
+
+              </div>
+
+              {errors.password && (
+                <p className="text-red-600 text-sm mt-2 ml-2">
+                  {errors.password}
+                </p>
+              )}
+
             </div>
 
-            {/* Confirm Password */}
+            {/* ================= CONFIRM PASSWORD ================= */}
 
-            <div className="flex items-center rounded-2xl px-5 py-4 bg-[#f9ead6] shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]">
-              <FaLock className="text-amber-600 mr-4" />
+            <div>
 
-              <input
-                type="password"
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-transparent outline-none"
-                required
-              />
+              <div
+                className={`
+                  flex
+                  items-center
+                  rounded-2xl
+                  px-5
+                  py-4
+                  bg-[#f9ead6]
+                  shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]
+                  border-2
+                  ${
+                    errors.confirmPassword
+                      ? "border-red-500"
+                      : "border-transparent"
+                  }
+                `}
+              >
+
+                <FaLock className="text-amber-600 mr-4" />
+
+                <input
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={handleConfirmPasswordChange}
+                  className="w-full bg-transparent outline-none"
+                />
+
+              </div>
+
+              {errors.confirmPassword && (
+                <p className="text-red-600 text-sm mt-2 ml-2">
+                  {errors.confirmPassword}
+                </p>
+              )}
+
             </div>
+
+            {/* ================= REGISTER BUTTON ================= */}
 
             <button
               type="submit"
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white py-4 rounded-2xl font-semibold text-lg flex justify-center items-center gap-2 transition-all duration-300 hover:scale-105"
+              className="
+                w-full
+                bg-amber-500
+                hover:bg-amber-600
+                text-white
+                py-4
+                rounded-2xl
+                font-semibold
+                text-lg
+                flex
+                justify-center
+                items-center
+                gap-2
+                transition-all
+                duration-300
+                hover:scale-105
+              "
             >
               Create Account
               <FaArrowRight />
@@ -200,7 +449,10 @@ function Register() {
 
           </form>
 
+          {/* ================= LOGIN ================= */}
+
           <p className="text-center mt-8">
+
             Already have an account?
 
             <Link
@@ -209,6 +461,7 @@ function Register() {
             >
               Login
             </Link>
+
           </p>
 
         </div>
