@@ -76,7 +76,7 @@ const pageTitles = {
   subtitle: "Manage your assigned courses.",
 },
 
-"/mentor/course": {
+"/mentor/course/:id": {
   title: "Course Details",
   subtitle: "Manage lessons, quizzes and assignments.",
 },
