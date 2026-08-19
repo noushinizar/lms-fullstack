@@ -82,7 +82,7 @@ const pageTitles = {
 },
 
 "/mentor/quizzes/:quizId" :{
-  title: "questions",
+  title: "Questions",
   subtitle: "Manage questions.",
 },
 
