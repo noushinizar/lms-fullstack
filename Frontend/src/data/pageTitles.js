@@ -81,6 +81,11 @@ const pageTitles = {
   subtitle: "Manage lessons, quizzes and assignments.",
 },
 
+"/mentor/quizzes/:quizId" :{
+  title: "questions",
+  subtitle: "Manage questions.",
+},
+
 "/mentor/profile": {
   title: "Profile",
   subtitle: "Manage your mentor account.",
