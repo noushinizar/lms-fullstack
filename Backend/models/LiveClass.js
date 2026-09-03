@@ -11,14 +11,21 @@ const liveClassSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
+      trim: true,
+    },
+
+    description: {
+      type: String,
+      default: "",
     },
 
     meetingLink: {
       type: String,
       required: true,
+      trim: true,
     },
 
-    scheduledDate: {
+    scheduledAt: {
       type: Date,
       required: true,
     },
@@ -26,11 +33,18 @@ const liveClassSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      required: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["scheduled", "completed", "cancelled"],
+      default: "scheduled",
     },
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 const LiveClass = mongoose.model("LiveClass", liveClassSchema);

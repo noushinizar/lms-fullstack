@@ -21,6 +21,7 @@ import courseProgressRoutes from "./routes/courseProgressRoutes.js";
 import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import mentorDashboardRoutes from "./routes/mentorDashboardRoutes.js";
+import liveClassRoutes from "./routes/liveClassRoutes.js";
 
 dotenv.config();
 
@@ -81,6 +82,8 @@ app.use("/api/communication", communicationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 app.use("/api/users", userRoutes);
+
+app.use("/api/live-classes", liveClassRoutes);
 
 app.get("/", (req, res) => {
   res.send("LMS API Running...");
