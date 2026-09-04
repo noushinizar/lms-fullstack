@@ -24,7 +24,7 @@ const router = express.Router();
 router.post(
   "/",
   protect,
-  authorizeRoles("mentor"),
+  authorizeRoles("mentor", "admin"),
   createLiveClass
 );
 
