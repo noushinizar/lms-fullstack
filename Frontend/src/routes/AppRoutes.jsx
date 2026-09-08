@@ -39,7 +39,7 @@ import MentorCourses from "../pages/mentor/Courses";
 import MentorCourseDetails from "../pages/mentor/CourseDetails";
 import QuestionManagement from "../pages/mentor/QuestionManagement";
 import AssignmentSubmissions from "../pages/mentor/AssignmentSubmissions";
-import LiveClasses from "../pages/mentor/LiveClasses";
+import LiveClasses from "./pages/student/LiveClasses";
 
 // Common / Profile
 import Profile from "../pages/profile/Profile";
