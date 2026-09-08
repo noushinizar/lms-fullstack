@@ -26,6 +26,7 @@ import MySubmissions from "../pages/student/MySubmissions";
 import Progress from "../pages/student/Progress";
 import MyCertificates from "../pages/student/MyCertificates";
 import CertificatePreview from "../pages/student/CertificatePreview";
+import LiveClasses from "../pages/student/LiveClasses";
 
 // Admin Pages
 import AdminDashboard from "../pages/admin/Dashboard";
@@ -38,6 +39,7 @@ import MentorCourses from "../pages/mentor/Courses";
 import MentorCourseDetails from "../pages/mentor/CourseDetails";
 import QuestionManagement from "../pages/mentor/QuestionManagement";
 import AssignmentSubmissions from "../pages/mentor/AssignmentSubmissions";
+import LiveClasses from "../pages/mentor/LiveClasses";
 
 // Common / Profile
 import Profile from "../pages/profile/Profile";
@@ -57,7 +59,7 @@ import NotFound from "../components/common/NotFound";
 
 // Admin
 import EnrollmentRequests from "../pages/admin/EnrollmentRequests";
-import LiveClasses from "../pages/mentor/LiveClasses";
+
 
 /* =========================================================
    GET LOGGED-IN USER
@@ -303,8 +305,8 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-
-        <Route
+ 
+       <Route
           path="/student/certificates"
           element={
             <ProtectedRoute role="student">
@@ -332,7 +334,14 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-
+         <Route
+          path="/student/live-classes"
+          element={
+            <StudentLayout>
+              <LiveClasses />
+            </StudentLayout>
+          }
+        />
         {/* =================================================
             ADMIN
         ================================================= */}
@@ -383,8 +392,7 @@ function AppRoutes() {
             element={<AssignmentSubmissions />}
           />
 
-          <Route path="/mentor/live-classes" 
-          element={<LiveClasses />} />
+          <Route path="/mentor/live-classes" element={<LiveClasses />} />
         </Route>
 
         {/* =================================================

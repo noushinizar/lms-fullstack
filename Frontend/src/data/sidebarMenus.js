@@ -44,7 +44,7 @@ export const sidebarMenus = {
     {
       name: "Live Classes",
       icon: Video,
-      path: "/live-classes",
+      path: "/student/live-classes",
     },
     {
       name: "Profile",
