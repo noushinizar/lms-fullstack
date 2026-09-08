@@ -11,6 +11,7 @@ import { getMyCourses } from "../../services/mentorService";
 
 import LoadingSpinner from "../../components/common/LoadingSpinner";
 import EmptyState from "../../components/common/EmptyState";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 
 import { showSuccess, showError } from "../../utils/toast";
 
@@ -21,6 +22,9 @@ function LiveClasses() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // ==========================================
   // EDIT MODE
@@ -59,8 +63,7 @@ function LiveClasses() {
       console.error("Fetch Live Classes Error:", error);
 
       showError(
-        error.response?.data?.message ||
-          "Failed to load live classes."
+        error.response?.data?.message || "Failed to load live classes.",
       );
     } finally {
       setLoading(false);
@@ -92,10 +95,7 @@ function LiveClasses() {
     const date = new Date(dateValue);
 
     if (Number.isNaN(date.getTime())) {
-      console.error(
-        "Invalid scheduledAt value:",
-        dateValue
-      );
+      console.error("Invalid scheduledAt value:", dateValue);
 
       return "Invalid date";
     }
@@ -122,10 +122,7 @@ function LiveClasses() {
     const date = new Date(dateValue);
 
     if (Number.isNaN(date.getTime())) {
-      console.error(
-        "Invalid date for input:",
-        dateValue
-      );
+      console.error("Invalid date for input:", dateValue);
 
       return "";
     }
@@ -140,21 +137,13 @@ function LiveClasses() {
 
     const year = date.getFullYear();
 
-    const month = String(
-      date.getMonth() + 1
-    ).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
 
-    const day = String(
-      date.getDate()
-    ).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
 
-    const hours = String(
-      date.getHours()
-    ).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
 
-    const minutes = String(
-      date.getMinutes()
-    ).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
 
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
@@ -186,22 +175,15 @@ function LiveClasses() {
     setEditingId(liveClass._id);
 
     setFormData({
-      courseId:
-        liveClass.courseId?._id ||
-        liveClass.courseId ||
-        "",
+      courseId: liveClass.courseId?._id || liveClass.courseId || "",
 
       title: liveClass.title || "",
 
-      description:
-        liveClass.description || "",
+      description: liveClass.description || "",
 
-      meetingLink:
-        liveClass.meetingLink || "",
+      meetingLink: liveClass.meetingLink || "",
 
-      scheduledAt: formatDateForInput(
-        liveClass.scheduledAt
-      ),
+      scheduledAt: formatDateForInput(liveClass.scheduledAt),
     });
 
     setShowForm(true);
@@ -233,9 +215,7 @@ function LiveClasses() {
       !formData.meetingLink.trim() ||
       !formData.scheduledAt
     ) {
-      showError(
-        "Please fill in all required fields."
-      );
+      showError("Please fill in all required fields.");
 
       return;
     }
@@ -247,9 +227,7 @@ function LiveClasses() {
     try {
       new URL(formData.meetingLink);
     } catch {
-      showError(
-        "Please enter a valid meeting link."
-      );
+      showError("Please enter a valid meeting link.");
 
       return;
     }
@@ -258,18 +236,10 @@ function LiveClasses() {
     // VALIDATE DATE
     // ==========================================
 
-    const selectedDate = new Date(
-      formData.scheduledAt
-    );
+    const selectedDate = new Date(formData.scheduledAt);
 
-    if (
-      Number.isNaN(
-        selectedDate.getTime()
-      )
-    ) {
-      showError(
-        "Please select a valid date and time."
-      );
+    if (Number.isNaN(selectedDate.getTime())) {
+      showError("Please select a valid date and time.");
 
       return;
     }
@@ -286,48 +256,32 @@ function LiveClasses() {
 
         title: formData.title.trim(),
 
-        description:
-          formData.description.trim(),
+        description: formData.description.trim(),
 
-        meetingLink:
-          formData.meetingLink.trim(),
+        meetingLink: formData.meetingLink.trim(),
 
-        scheduledAt:
-          selectedDate.toISOString(),
+        scheduledAt: selectedDate.toISOString(),
       };
 
-      console.log(
-        "Sending Live Class Data:",
-        liveClassData
-      );
+      console.log("Sending Live Class Data:", liveClassData);
 
       // ==========================================
       // UPDATE
       // ==========================================
 
       if (editingId) {
-        await updateLiveClass(
-          editingId,
-          liveClassData
-        );
+        await updateLiveClass(editingId, liveClassData);
 
-        showSuccess(
-          "Live class updated successfully."
-        );
+        showSuccess("Live class updated successfully.");
       }
 
       // ==========================================
       // CREATE
       // ==========================================
-
       else {
-        await createLiveClass(
-          liveClassData
-        );
+        await createLiveClass(liveClassData);
 
-        showSuccess(
-          "Live class scheduled successfully."
-        );
+        showSuccess("Live class scheduled successfully.");
       }
 
       // ==========================================
@@ -343,17 +297,15 @@ function LiveClasses() {
       resetForm();
     } catch (error) {
       console.error(
-        editingId
-          ? "Update Live Class Error:"
-          : "Create Live Class Error:",
-        error
+        editingId ? "Update Live Class Error:" : "Create Live Class Error:",
+        error,
       );
 
       showError(
         error.response?.data?.message ||
           (editingId
             ? "Failed to update live class."
-            : "Failed to schedule live class.")
+            : "Failed to schedule live class."),
       );
     } finally {
       setSubmitting(false);
@@ -364,46 +316,47 @@ function LiveClasses() {
   // DELETE
   // ==========================================
 
-  const handleDelete = async (id) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this live class?"
-    );
+  const handleDeleteClick = (id) => {
+    setDeleteId(id);
+    setShowDeleteDialog(true);
+  };
 
-    if (!confirmed) return;
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
 
     try {
-      await deleteLiveClass(id);
+      setDeleting(true);
+
+      await deleteLiveClass(deleteId);
 
       setLiveClasses((prev) =>
-        prev.filter(
-          (liveClass) =>
-            liveClass._id !== id
-        )
+        prev.filter((liveClass) => liveClass._id !== deleteId),
       );
 
-      /*
-       * If the deleted class was being edited,
-       * reset the form.
-       */
-
-      if (editingId === id) {
+      if (editingId === deleteId) {
         resetForm();
       }
 
-      showSuccess(
-        "Live class deleted successfully."
-      );
+      showSuccess("Live class deleted successfully.");
+
+      setShowDeleteDialog(false);
+      setDeleteId(null);
     } catch (error) {
-      console.error(
-        "Delete Live Class Error:",
-        error
-      );
+      console.error("Delete Live Class Error:", error);
 
       showError(
-        error.response?.data?.message ||
-          "Failed to delete live class."
+        error.response?.data?.message || "Failed to delete live class.",
       );
+    } finally {
+      setDeleting(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    if (deleting) return;
+
+    setShowDeleteDialog(false);
+    setDeleteId(null);
   };
 
   // ==========================================
@@ -420,17 +373,13 @@ function LiveClasses() {
 
   return (
     <div className="space-y-6">
-
       {/* ==========================================
           HEADER
       ========================================== */}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Live Classes
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900">Live Classes</h1>
 
           <p className="text-gray-500 mt-1">
             Schedule and manage your live classes.
@@ -448,11 +397,8 @@ function LiveClasses() {
           }}
           className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-3 rounded-lg font-semibold transition"
         >
-          {showForm
-            ? "Cancel"
-            : "+ Schedule Live Class"}
+          {showForm ? "Cancel" : "+ Schedule Live Class"}
         </button>
-
       </div>
 
       {/* ==========================================
@@ -461,18 +407,11 @@ function LiveClasses() {
 
       {showForm && (
         <div className="bg-white rounded-xl shadow-lg p-6">
-
           <h2 className="text-xl font-bold mb-6">
-            {editingId
-              ? "Edit Live Class"
-              : "Schedule Live Class"}
+            {editingId ? "Edit Live Class" : "Schedule Live Class"}
           </h2>
 
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-5"
-          >
-
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* COURSE */}
 
             <div>
@@ -487,15 +426,10 @@ function LiveClasses() {
                 required
                 className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:outline-none"
               >
-                <option value="">
-                  Select Course
-                </option>
+                <option value="">Select Course</option>
 
                 {courses.map((course) => (
-                  <option
-                    key={course._id}
-                    value={course._id}
-                  >
+                  <option key={course._id} value={course._id}>
                     {course.title}
                   </option>
                 ))}
@@ -575,7 +509,6 @@ function LiveClasses() {
             {/* SUBMIT BUTTONS */}
 
             <div className="flex justify-end gap-3">
-
               {editingId && (
                 <button
                   type="button"
@@ -597,12 +530,10 @@ function LiveClasses() {
                     ? "Updating..."
                     : "Scheduling..."
                   : editingId
-                  ? "Update Class"
-                  : "Schedule Class"}
+                    ? "Update Class"
+                    : "Schedule Class"}
               </button>
-
             </div>
-
           </form>
         </div>
       )}
@@ -612,125 +543,94 @@ function LiveClasses() {
       ========================================== */}
 
       {liveClasses.length === 0 ? (
-
         <EmptyState
           icon="🎥"
           title="No Live Classes"
           description="You haven't scheduled any live classes yet."
         />
-
       ) : (
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {liveClasses.map((liveClass) => (
+            <div
+              key={liveClass._id}
+              className="bg-white rounded-xl shadow-lg p-6"
+            >
+              {/* HEADER */}
 
-          {liveClasses.map(
-            (liveClass) => (
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    {liveClass.title}
+                  </h2>
 
-              <div
-                key={liveClass._id}
-                className="bg-white rounded-xl shadow-lg p-6"
-              >
-
-                {/* HEADER */}
-
-                <div className="flex items-start justify-between gap-4">
-
-                  <div>
-
-                    <h2 className="text-xl font-bold text-gray-900">
-                      {liveClass.title}
-                    </h2>
-
-                    <p className="text-gray-500 mt-1">
-                      {liveClass.courseId?.title ||
-                        "Course"}
-                    </p>
-
-                  </div>
-
-                  <span className="px-3 py-1 rounded-full text-sm bg-amber-100 text-amber-700 capitalize">
-                    {liveClass.status ||
-                      "scheduled"}
-                  </span>
-
-                </div>
-
-                {/* DESCRIPTION */}
-
-                {liveClass.description && (
-                  <p className="text-gray-600 mt-4">
-                    {liveClass.description}
+                  <p className="text-gray-500 mt-1">
+                    {liveClass.courseId?.title || "Course"}
                   </p>
-                )}
-
-                {/* DATE */}
-
-                <div className="mt-5 space-y-2 text-sm text-gray-600">
-
-                  <p>
-                    📅{" "}
-                    {formatDate(
-                      liveClass.scheduledAt
-                    )}
-                  </p>
-
                 </div>
 
-                {/* ACTIONS */}
-
-                <div className="flex gap-3 mt-6">
-
-                  <a
-                    href={
-                      liveClass.meetingLink
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold transition"
-                  >
-                    Join Meeting
-                  </a>
-
-                  {/* EDIT */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleEdit(
-                        liveClass
-                      )
-                    }
-                    className="px-4 py-2 border border-amber-300 text-amber-600 hover:bg-amber-50 rounded-lg transition font-semibold"
-                  >
-                    Edit
-                  </button>
-
-                  {/* DELETE */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleDelete(
-                        liveClass._id
-                      )
-                    }
-                    className="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg transition"
-                  >
-                    Delete
-                  </button>
-
-                </div>
-
+                <span className="px-3 py-1 rounded-full text-sm bg-amber-100 text-amber-700 capitalize">
+                  {liveClass.status || "scheduled"}
+                </span>
               </div>
-            )
-          )}
 
+              {/* DESCRIPTION */}
+
+              {liveClass.description && (
+                <p className="text-gray-600 mt-4">{liveClass.description}</p>
+              )}
+
+              {/* DATE */}
+
+              <div className="mt-5 space-y-2 text-sm text-gray-600">
+                <p>📅 {formatDate(liveClass.scheduledAt)}</p>
+              </div>
+
+              {/* ACTIONS */}
+
+              <div className="flex gap-3 mt-6">
+                <a
+                  href={liveClass.meetingLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold transition"
+                >
+                  Join Meeting
+                </a>
+
+                {/* EDIT */}
+
+                <button
+                  type="button"
+                  onClick={() => handleEdit(liveClass)}
+                  className="px-4 py-2 border border-amber-300 text-amber-600 hover:bg-amber-50 rounded-lg transition font-semibold"
+                >
+                  Edit
+                </button>
+
+                {/* DELETE */}
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteClick(liveClass._id)}
+                  className="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg transition"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
-
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        title="Delete Live Class"
+        message="Are you sure you want to delete this live class? This action cannot be undone."
+        onCancel={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        loading={deleting}
+      />
     </div>
   );
 }
 
 export default LiveClasses;
-
