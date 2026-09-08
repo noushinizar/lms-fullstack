@@ -57,6 +57,7 @@ import NotFound from "../components/common/NotFound";
 
 // Admin
 import EnrollmentRequests from "../pages/admin/EnrollmentRequests";
+import LiveClasses from "../pages/mentor/LiveClasses";
 
 /* =========================================================
    GET LOGGED-IN USER
@@ -107,12 +108,7 @@ function HomeRoute() {
   const user = getStoredUser();
 
   if (user) {
-    return (
-      <Navigate
-        to={getDashboardPath(user.role)}
-        replace
-      />
-    );
+    return <Navigate to={getDashboardPath(user.role)} replace />;
   }
 
   return <Home />;
@@ -128,12 +124,7 @@ function PublicAuthRoute({ children }) {
   const user = getStoredUser();
 
   if (user) {
-    return (
-      <Navigate
-        to={getDashboardPath(user.role)}
-        replace
-      />
-    );
+    return <Navigate to={getDashboardPath(user.role)} replace />;
   }
 
   return children;
@@ -147,23 +138,14 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-
         {/* =================================================
             PUBLIC WEBSITE
         ================================================= */}
 
         <Route element={<PublicLayout />}>
+          <Route path="/" element={<HomeRoute />} />
 
-          <Route
-            path="/"
-            element={<HomeRoute />}
-          />
-
-          <Route
-            path="/unauthorized"
-            element={<Unauthorized />}
-          />
-
+          <Route path="/unauthorized" element={<Unauthorized />} />
         </Route>
 
         {/* =================================================
@@ -188,15 +170,9 @@ function AppRoutes() {
           }
         />
 
-        <Route
-          path="/forgot-password"
-          element={<ForgotPassword />}
-        />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        <Route
-          path="/reset-password/:token"
-          element={<ResetPassword />}
-        />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
 
         {/* =================================================
             STUDENT
@@ -369,32 +345,15 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
+          <Route path="dashboard" element={<AdminDashboard />} />
 
-          <Route
-            path="dashboard"
-            element={<AdminDashboard />}
-          />
+          <Route path="enrollments" element={<EnrollmentRequests />} />
 
-          <Route
-            path="enrollments"
-            element={<EnrollmentRequests />}
-          />
+          <Route path="courses" element={<Courses />} />
 
-          <Route
-            path="courses"
-            element={<Courses />}
-          />
+          <Route path="people" element={<People />} />
 
-          <Route
-            path="people"
-            element={<People />}
-          />
-
-          <Route
-            path="profile"
-            element={<Profile />}
-          />
-
+          <Route path="profile" element={<Profile />} />
         </Route>
 
         {/* =================================================
@@ -409,48 +368,30 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
+          <Route path="dashboard" element={<MentorDashboard />} />
 
-          <Route
-            path="dashboard"
-            element={<MentorDashboard />}
-          />
+          <Route path="courses" element={<MentorCourses />} />
 
-          <Route
-            path="courses"
-            element={<MentorCourses />}
-          />
+          <Route path="course/:id" element={<MentorCourseDetails />} />
 
-          <Route
-            path="course/:id"
-            element={<MentorCourseDetails />}
-          />
+          <Route path="quizzes/:quizId" element={<QuestionManagement />} />
 
-          <Route
-            path="quizzes/:quizId"
-            element={<QuestionManagement />}
-          />
-
-          <Route
-            path="profile"
-            element={<Profile />}
-          />
+          <Route path="profile" element={<Profile />} />
 
           <Route
             path="assignments/:assignmentId/submissions"
             element={<AssignmentSubmissions />}
           />
 
+          <Route path="/mentor/live-classes" 
+          element={<LiveClasses />} />
         </Route>
 
         {/* =================================================
             404
         ================================================= */}
 
-        <Route
-          path="*"
-          element={<NotFound />}
-        />
-
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

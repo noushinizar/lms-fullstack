@@ -70,6 +70,11 @@ export const sidebarMenus = {
       path: "/mentor/courses",
     },
     {
+      name: "Live Classes",
+      icon:  Video,
+      path: "/mentor/live-classes",
+    },
+    {
       name: "Profile",
       icon: User,
       path: "/mentor/profile",
