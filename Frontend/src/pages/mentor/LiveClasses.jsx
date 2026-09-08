@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   getMyLiveClasses,
   createLiveClass,
+  updateLiveClass,
   deleteLiveClass,
 } from "../../services/liveClassService";
 
@@ -20,6 +21,12 @@ function LiveClasses() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // ==========================================
+  // EDIT MODE
+  // ==========================================
+
+  const [editingId, setEditingId] = useState(null);
 
   const [formData, setFormData] = useState({
     courseId: "",
@@ -52,7 +59,8 @@ function LiveClasses() {
       console.error("Fetch Live Classes Error:", error);
 
       showError(
-        error.response?.data?.message || "Failed to load live classes."
+        error.response?.data?.message ||
+          "Failed to load live classes."
       );
     } finally {
       setLoading(false);
@@ -84,7 +92,11 @@ function LiveClasses() {
     const date = new Date(dateValue);
 
     if (Number.isNaN(date.getTime())) {
-      console.error("Invalid scheduledAt value:", dateValue);
+      console.error(
+        "Invalid scheduledAt value:",
+        dateValue
+      );
+
       return "Invalid date";
     }
 
@@ -99,94 +111,249 @@ function LiveClasses() {
   };
 
   // ==========================================
-  // CREATE LIVE CLASS
+  // CONVERT DATE TO DATETIME-LOCAL FORMAT
+  // ==========================================
+
+  const formatDateForInput = (dateValue) => {
+    if (!dateValue) {
+      return "";
+    }
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+      console.error(
+        "Invalid date for input:",
+        dateValue
+      );
+
+      return "";
+    }
+
+    /*
+     * datetime-local requires:
+     *
+     * YYYY-MM-DDTHH:mm
+     *
+     * We use the user's local timezone.
+     */
+
+    const year = date.getFullYear();
+
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
+
+    const day = String(
+      date.getDate()
+    ).padStart(2, "0");
+
+    const hours = String(
+      date.getHours()
+    ).padStart(2, "0");
+
+    const minutes = String(
+      date.getMinutes()
+    ).padStart(2, "0");
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  // ==========================================
+  // RESET FORM
+  // ==========================================
+
+  const resetForm = () => {
+    setFormData({
+      courseId: "",
+      title: "",
+      description: "",
+      meetingLink: "",
+      scheduledAt: "",
+    });
+
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  // ==========================================
+  // START EDITING
+  // ==========================================
+
+  const handleEdit = (liveClass) => {
+    console.log("Editing Live Class:", liveClass);
+
+    setEditingId(liveClass._id);
+
+    setFormData({
+      courseId:
+        liveClass.courseId?._id ||
+        liveClass.courseId ||
+        "",
+
+      title: liveClass.title || "",
+
+      description:
+        liveClass.description || "",
+
+      meetingLink:
+        liveClass.meetingLink || "",
+
+      scheduledAt: formatDateForInput(
+        liveClass.scheduledAt
+      ),
+    });
+
+    setShowForm(true);
+
+    /*
+     * Scroll to the form after opening it.
+     */
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  // ==========================================
+  // CREATE / UPDATE LIVE CLASS
   // ==========================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Required field validation
+    // ==========================================
+    // VALIDATION
+    // ==========================================
+
     if (
       !formData.courseId ||
       !formData.title.trim() ||
       !formData.meetingLink.trim() ||
       !formData.scheduledAt
     ) {
-      showError("Please fill in all required fields.");
+      showError(
+        "Please fill in all required fields."
+      );
+
       return;
     }
 
-    // Validate meeting URL
+    // ==========================================
+    // VALIDATE MEETING LINK
+    // ==========================================
+
     try {
       new URL(formData.meetingLink);
     } catch {
-      showError("Please enter a valid meeting link.");
+      showError(
+        "Please enter a valid meeting link."
+      );
+
       return;
     }
 
-    // Validate date
-    const selectedDate = new Date(formData.scheduledAt);
+    // ==========================================
+    // VALIDATE DATE
+    // ==========================================
 
-    if (Number.isNaN(selectedDate.getTime())) {
-      showError("Please select a valid date and time.");
+    const selectedDate = new Date(
+      formData.scheduledAt
+    );
+
+    if (
+      Number.isNaN(
+        selectedDate.getTime()
+      )
+    ) {
+      showError(
+        "Please select a valid date and time."
+      );
+
       return;
     }
 
     try {
       setSubmitting(true);
 
-      /*
-       * datetime-local returns something like:
-       *
-       * 2026-09-08T15:30
-       *
-       * Convert it to an ISO string before sending:
-       *
-       * 2026-09-08T10:00:00.000Z
-       *
-       * This ensures MongoDB receives a proper Date value.
-       */
+      // ==========================================
+      // PREPARE DATA
+      // ==========================================
 
       const liveClassData = {
         courseId: formData.courseId,
+
         title: formData.title.trim(),
-        description: formData.description.trim(),
-        meetingLink: formData.meetingLink.trim(),
-        scheduledAt: selectedDate.toISOString(),
+
+        description:
+          formData.description.trim(),
+
+        meetingLink:
+          formData.meetingLink.trim(),
+
+        scheduledAt:
+          selectedDate.toISOString(),
       };
 
-      console.log("Sending Live Class:", liveClassData);
+      console.log(
+        "Sending Live Class Data:",
+        liveClassData
+      );
 
-      const newClass = await createLiveClass(liveClassData);
+      // ==========================================
+      // UPDATE
+      // ==========================================
 
-      console.log("Created Live Class:", newClass);
+      if (editingId) {
+        await updateLiveClass(
+          editingId,
+          liveClassData
+        );
 
-      /*
-       * Instead of relying on the POST response formatting,
-       * fetch the latest data from the backend.
-       *
-       * This ensures the UI displays exactly what MongoDB stored.
-       */
+        showSuccess(
+          "Live class updated successfully."
+        );
+      }
+
+      // ==========================================
+      // CREATE
+      // ==========================================
+
+      else {
+        await createLiveClass(
+          liveClassData
+        );
+
+        showSuccess(
+          "Live class scheduled successfully."
+        );
+      }
+
+      // ==========================================
+      // REFRESH DATA
+      // ==========================================
 
       await fetchData();
 
-      // Reset form
-      setFormData({
-        courseId: "",
-        title: "",
-        description: "",
-        meetingLink: "",
-        scheduledAt: "",
-      });
+      // ==========================================
+      // RESET
+      // ==========================================
 
-      setShowForm(false);
-
-      showSuccess("Live class scheduled successfully.");
+      resetForm();
     } catch (error) {
-      console.error("Create Live Class Error:", error);
+      console.error(
+        editingId
+          ? "Update Live Class Error:"
+          : "Create Live Class Error:",
+        error
+      );
 
       showError(
-        error.response?.data?.message || "Failed to schedule live class."
+        error.response?.data?.message ||
+          (editingId
+            ? "Failed to update live class."
+            : "Failed to schedule live class.")
       );
     } finally {
       setSubmitting(false);
@@ -208,15 +375,33 @@ function LiveClasses() {
       await deleteLiveClass(id);
 
       setLiveClasses((prev) =>
-        prev.filter((liveClass) => liveClass._id !== id)
+        prev.filter(
+          (liveClass) =>
+            liveClass._id !== id
+        )
       );
 
-      showSuccess("Live class deleted successfully.");
+      /*
+       * If the deleted class was being edited,
+       * reset the form.
+       */
+
+      if (editingId === id) {
+        resetForm();
+      }
+
+      showSuccess(
+        "Live class deleted successfully."
+      );
     } catch (error) {
-      console.error("Delete Live Class Error:", error);
+      console.error(
+        "Delete Live Class Error:",
+        error
+      );
 
       showError(
-        error.response?.data?.message || "Failed to delete live class."
+        error.response?.data?.message ||
+          "Failed to delete live class."
       );
     }
   };
@@ -254,26 +439,39 @@ function LiveClasses() {
 
         <button
           type="button"
-          onClick={() => setShowForm((prev) => !prev)}
+          onClick={() => {
+            if (showForm) {
+              resetForm();
+            } else {
+              setShowForm(true);
+            }
+          }}
           className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-3 rounded-lg font-semibold transition"
         >
-          {showForm ? "Cancel" : "+ Schedule Live Class"}
+          {showForm
+            ? "Cancel"
+            : "+ Schedule Live Class"}
         </button>
 
       </div>
 
       {/* ==========================================
-          CREATE FORM
+          CREATE / EDIT FORM
       ========================================== */}
 
       {showForm && (
         <div className="bg-white rounded-xl shadow-lg p-6">
 
           <h2 className="text-xl font-bold mb-6">
-            Schedule Live Class
+            {editingId
+              ? "Edit Live Class"
+              : "Schedule Live Class"}
           </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
+          >
 
             {/* COURSE */}
 
@@ -374,9 +572,20 @@ function LiveClasses() {
               />
             </div>
 
-            {/* SUBMIT */}
+            {/* SUBMIT BUTTONS */}
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-3">
+
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={submitting}
+                  className="px-6 py-3 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg font-semibold transition"
+                >
+                  Cancel Edit
+                </button>
+              )}
 
               <button
                 type="submit"
@@ -384,7 +593,11 @@ function LiveClasses() {
                 className="bg-amber-500 hover:bg-amber-600 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold transition"
               >
                 {submitting
-                  ? "Scheduling..."
+                  ? editingId
+                    ? "Updating..."
+                    : "Scheduling..."
+                  : editingId
+                  ? "Update Class"
                   : "Schedule Class"}
               </button>
 
@@ -410,82 +623,109 @@ function LiveClasses() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {liveClasses.map((liveClass) => (
+          {liveClasses.map(
+            (liveClass) => (
 
-            <div
-              key={liveClass._id}
-              className="bg-white rounded-xl shadow-lg p-6"
-            >
+              <div
+                key={liveClass._id}
+                className="bg-white rounded-xl shadow-lg p-6"
+              >
 
-              {/* HEADER */}
+                {/* HEADER */}
 
-              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-4">
 
-                <div>
+                  <div>
 
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {liveClass.title}
-                  </h2>
+                    <h2 className="text-xl font-bold text-gray-900">
+                      {liveClass.title}
+                    </h2>
 
-                  <p className="text-gray-500 mt-1">
-                    {liveClass.courseId?.title || "Course"}
+                    <p className="text-gray-500 mt-1">
+                      {liveClass.courseId?.title ||
+                        "Course"}
+                    </p>
+
+                  </div>
+
+                  <span className="px-3 py-1 rounded-full text-sm bg-amber-100 text-amber-700 capitalize">
+                    {liveClass.status ||
+                      "scheduled"}
+                  </span>
+
+                </div>
+
+                {/* DESCRIPTION */}
+
+                {liveClass.description && (
+                  <p className="text-gray-600 mt-4">
+                    {liveClass.description}
+                  </p>
+                )}
+
+                {/* DATE */}
+
+                <div className="mt-5 space-y-2 text-sm text-gray-600">
+
+                  <p>
+                    📅{" "}
+                    {formatDate(
+                      liveClass.scheduledAt
+                    )}
                   </p>
 
                 </div>
 
-                <span className="px-3 py-1 rounded-full text-sm bg-amber-100 text-amber-700 capitalize">
-                  {liveClass.status || "scheduled"}
-                </span>
+                {/* ACTIONS */}
+
+                <div className="flex gap-3 mt-6">
+
+                  <a
+                    href={
+                      liveClass.meetingLink
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold transition"
+                  >
+                    Join Meeting
+                  </a>
+
+                  {/* EDIT */}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleEdit(
+                        liveClass
+                      )
+                    }
+                    className="px-4 py-2 border border-amber-300 text-amber-600 hover:bg-amber-50 rounded-lg transition font-semibold"
+                  >
+                    Edit
+                  </button>
+
+                  {/* DELETE */}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleDelete(
+                        liveClass._id
+                      )
+                    }
+                    className="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg transition"
+                  >
+                    Delete
+                  </button>
+
+                </div>
 
               </div>
-
-              {/* DESCRIPTION */}
-
-              {liveClass.description && (
-                <p className="text-gray-600 mt-4">
-                  {liveClass.description}
-                </p>
-              )}
-
-              {/* DATE */}
-
-              <div className="mt-5 space-y-2 text-sm text-gray-600">
-
-                <p>
-                  📅 {formatDate(liveClass.scheduledAt)}
-                </p>
-
-              </div>
-
-              {/* ACTIONS */}
-
-              <div className="flex gap-3 mt-6">
-
-                <a
-                  href={liveClass.meetingLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg font-semibold transition"
-                >
-                  Join Meeting
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() => handleDelete(liveClass._id)}
-                  className="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg transition"
-                >
-                  Delete
-                </button>
-
-              </div>
-
-            </div>
-
-          ))}
+            )
+          )}
 
         </div>
-
       )}
 
     </div>
@@ -493,3 +733,4 @@ function LiveClasses() {
 }
 
 export default LiveClasses;
+
