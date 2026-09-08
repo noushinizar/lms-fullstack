@@ -50,8 +50,7 @@ function LiveClasses() {
       console.log(error);
 
       showError(
-        error.response?.data?.message ||
-          "Failed to load live classes."
+        error.response?.data?.message || "Failed to load live classes.",
       );
     } finally {
       setLoading(false);
@@ -93,10 +92,7 @@ function LiveClasses() {
 
       const newClass = await createLiveClass(formData);
 
-      setLiveClasses((prev) => [
-        newClass,
-        ...prev,
-      ]);
+      setLiveClasses((prev) => [newClass, ...prev]);
 
       setFormData({
         courseId: "",
@@ -113,8 +109,7 @@ function LiveClasses() {
       console.log(error);
 
       showError(
-        error.response?.data?.message ||
-          "Failed to schedule live class."
+        error.response?.data?.message || "Failed to schedule live class.",
       );
     } finally {
       setSubmitting(false);
@@ -127,7 +122,7 @@ function LiveClasses() {
 
   const handleDelete = async (id) => {
     const confirmed = window.confirm(
-      "Are you sure you want to delete this live class?"
+      "Are you sure you want to delete this live class?",
     );
 
     if (!confirmed) return;
@@ -136,7 +131,7 @@ function LiveClasses() {
       await deleteLiveClass(id);
 
       setLiveClasses((prev) =>
-        prev.filter((liveClass) => liveClass._id !== id)
+        prev.filter((liveClass) => liveClass._id !== id),
       );
 
       showSuccess("Live class deleted successfully.");
@@ -144,8 +139,7 @@ function LiveClasses() {
       console.log(error);
 
       showError(
-        error.response?.data?.message ||
-          "Failed to delete live class."
+        error.response?.data?.message || "Failed to delete live class.",
       );
     }
   };
@@ -164,15 +158,11 @@ function LiveClasses() {
 
   return (
     <div className="space-y-6">
-
       {/* HEADER */}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Live Classes
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900">Live Classes</h1>
 
           <p className="text-gray-500 mt-1">
             Schedule and manage your live classes.
@@ -183,27 +173,17 @@ function LiveClasses() {
           onClick={() => setShowForm(!showForm)}
           className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-3 rounded-lg font-semibold transition"
         >
-          {showForm
-            ? "Cancel"
-            : "+ Schedule Live Class"}
+          {showForm ? "Cancel" : "+ Schedule Live Class"}
         </button>
-
       </div>
 
       {/* CREATE FORM */}
 
       {showForm && (
         <div className="bg-white rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-bold mb-6">Schedule Live Class</h2>
 
-          <h2 className="text-xl font-bold mb-6">
-            Schedule Live Class
-          </h2>
-
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-5"
-          >
-
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* COURSE */}
 
             <div>
@@ -217,15 +197,10 @@ function LiveClasses() {
                 onChange={handleChange}
                 className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:outline-none"
               >
-                <option value="">
-                  Select Course
-                </option>
+                <option value="">Select Course</option>
 
                 {courses.map((course) => (
-                  <option
-                    key={course._id}
-                    value={course._id}
-                  >
+                  <option key={course._id} value={course._id}>
                     {course.title}
                   </option>
                 ))}
@@ -302,19 +277,14 @@ function LiveClasses() {
             {/* SUBMIT */}
 
             <div className="flex justify-end">
-
               <button
                 type="submit"
                 disabled={submitting}
                 className="bg-amber-500 hover:bg-amber-600 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold transition"
               >
-                {submitting
-                  ? "Scheduling..."
-                  : "Schedule Class"}
+                {submitting ? "Scheduling..." : "Schedule Class"}
               </button>
-
             </div>
-
           </form>
         </div>
       )}
@@ -322,62 +292,53 @@ function LiveClasses() {
       {/* LIVE CLASSES */}
 
       {liveClasses.length === 0 ? (
-
         <EmptyState
           icon="🎥"
           title="No Live Classes"
           description="You haven't scheduled any live classes yet."
         />
-
       ) : (
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
           {liveClasses.map((liveClass) => (
-
             <div
               key={liveClass._id}
               className="bg-white rounded-xl shadow-lg p-6"
             >
-
               <div className="flex items-start justify-between gap-4">
-
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">
                     {liveClass.title}
                   </h2>
 
                   <p className="text-gray-500 mt-1">
-                    {liveClass.courseId?.title ||
-                      "Course"}
+                    {liveClass.courseId?.title || "Course"}
                   </p>
                 </div>
 
                 <span className="px-3 py-1 rounded-full text-sm bg-amber-100 text-amber-700 capitalize">
                   {liveClass.status}
                 </span>
-
               </div>
 
               {liveClass.description && (
-                <p className="text-gray-600 mt-4">
-                  {liveClass.description}
-                </p>
+                <p className="text-gray-600 mt-4">{liveClass.description}</p>
               )}
 
               <div className="mt-5 space-y-2 text-sm text-gray-600">
-
                 <p>
                   📅{" "}
-                  {new Date(
-                    liveClass.scheduledAt
-                  ).toLocaleString()}
+                  {new Date(liveClass.scheduledAt).toLocaleString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
                 </p>
-
               </div>
 
               <div className="flex gap-3 mt-6">
-
                 <a
                   href={liveClass.meetingLink}
                   target="_blank"
@@ -388,23 +349,16 @@ function LiveClasses() {
                 </a>
 
                 <button
-                  onClick={() =>
-                    handleDelete(liveClass._id)
-                  }
+                  onClick={() => handleDelete(liveClass._id)}
                   className="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg transition"
                 >
                   Delete
                 </button>
-
               </div>
-
             </div>
-
           ))}
-
         </div>
       )}
-
     </div>
   );
 }
