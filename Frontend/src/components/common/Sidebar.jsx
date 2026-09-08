@@ -61,7 +61,11 @@ function Sidebar() {
           return (
             <NavLink
               key={menu.name}
-              to={menu.path}
+  to={menu.path}
+  onClick={() => {
+    console.log("MENU:", menu.name);
+    console.log("PATH:", menu.path);
+  }}
               className={({ isActive }) =>
                 `flex items-center gap-4 px-5 py-3 rounded-xl transition-all duration-300 ${
                   isActive
@@ -69,8 +73,9 @@ function Sidebar() {
                     : "text-gray-400 hover:bg-amber-100 hover:text-amber-600"
                 }`
               }
+              
             >
-              console.log("SIDEBAR PATH:", menu.name, menu.path);
+             
               <Icon size={22} />
 
               <span className="font-medium">
