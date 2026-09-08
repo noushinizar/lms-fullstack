@@ -70,6 +70,7 @@ function Sidebar() {
                 }`
               }
             >
+              console.log("SIDEBAR PATH:", menu.name, menu.path);
               <Icon size={22} />
 
               <span className="font-medium">
