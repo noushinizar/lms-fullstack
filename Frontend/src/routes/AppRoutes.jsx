@@ -60,7 +60,6 @@ import NotFound from "../components/common/NotFound";
 // Admin
 import EnrollmentRequests from "../pages/admin/EnrollmentRequests";
 
-
 /* =========================================================
    GET LOGGED-IN USER
 ========================================================= */
@@ -305,8 +304,8 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
- 
-       <Route
+
+        <Route
           path="/student/certificates"
           element={
             <ProtectedRoute role="student">
@@ -334,12 +333,14 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-         <Route
+        <Route
           path="/student/live-classes"
           element={
-            <StudentLayout>
-              <LiveClasses />
-            </StudentLayout>
+            <ProtectedRoute role="student">
+              <StudentLayout>
+                <LiveClasses />
+              </StudentLayout>
+            </ProtectedRoute>
           }
         />
         {/* =================================================
