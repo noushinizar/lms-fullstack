@@ -59,6 +59,7 @@ import NotFound from "../components/common/NotFound";
 
 // Admin
 import EnrollmentRequests from "../pages/admin/EnrollmentRequests";
+import AdminLiveClasses from "../pages/admin/LiveClasses";
 
 /* =========================================================
    GET LOGGED-IN USER
@@ -362,6 +363,8 @@ function AppRoutes() {
           <Route path="courses" element={<Courses />} />
 
           <Route path="people" element={<People />} />
+
+          <Route path="live-classes" element={<AdminLiveClasses />} />
 
           <Route path="profile" element={<Profile />} />
         </Route>

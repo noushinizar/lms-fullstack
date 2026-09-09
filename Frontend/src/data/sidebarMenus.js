@@ -102,6 +102,11 @@ export const sidebarMenus = {
       icon: BookOpen,
       path: "/admin/courses",
     },
+     {
+    name: "Live Classes",
+    icon: Video,
+    path: "/admin/live-classes",
+  },
     {
       name: "People",
       icon: Users,
