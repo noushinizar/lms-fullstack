@@ -14,14 +14,19 @@ import { getAllLiveClasses, deleteLiveClass } from "../../services/liveClassServ
 
 import LoadingSpinner from "../../components/common/LoadingSpinner";
 import EmptyState from "../../components/common/EmptyState";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 
 import { showSuccess, showError } from "../../utils/toast";
 
 function LiveClasses() {
-  const [liveClasses, setLiveClasses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState(null);
+ const [liveClasses, setLiveClasses] = useState([]);
+const [loading, setLoading] = useState(true);
+const [deletingId, setDeletingId] = useState(null);
 
+const [confirmDelete, setConfirmDelete] = useState({
+  isOpen: false,
+  id: null,
+});
   useEffect(() => {
     fetchLiveClasses();
   }, []);
@@ -41,30 +46,53 @@ function LiveClasses() {
     }
   };
 
-  const handleDelete = async (id) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this live class?"
+ const handleDeleteClick = (id) => {
+  setConfirmDelete({
+    isOpen: true,
+    id,
+  });
+};
+
+const handleCancelDelete = () => {
+  if (deletingId) return;
+
+  setConfirmDelete({
+    isOpen: false,
+    id: null,
+  });
+};
+
+const handleConfirmDelete = async () => {
+  const id = confirmDelete.id;
+
+  if (!id) return;
+
+  try {
+    setDeletingId(id);
+
+    await deleteLiveClass(id);
+
+    setLiveClasses((prev) =>
+      prev.filter((liveClass) => liveClass._id !== id)
     );
 
-    if (!confirmed) return;
+    showSuccess("Live class deleted successfully.");
 
-    try {
-      setDeletingId(id);
+    setConfirmDelete({
+      isOpen: false,
+      id: null,
+    });
+  } catch (error) {
+    console.error("Delete live class error:", error);
 
-      await deleteLiveClass(id);
-
-      setLiveClasses((prev) =>
-        prev.filter((liveClass) => liveClass._id !== id)
-      );
-
-      showSuccess("Live class deleted successfully.");
-    } catch (error) {
-      console.error("Delete live class error:", error);
-      showError("Failed to delete live class.");
-    } finally {
-      setDeletingId(null);
-    }
-  };
+    showError(
+      error.response?.data?.message ||
+        "Failed to delete live class."
+    );
+  } finally {
+    setDeletingId(null);
+  }
+};
 
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString("en-IN", {
@@ -228,7 +256,7 @@ function LiveClasses() {
                     )}
 
                     <button
-                      onClick={() => handleDelete(liveClass._id)}
+                      onClick={() => handleDeleteClick(liveClass._id)}
                       disabled={deletingId === liveClass._id}
                       className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg font-semibold text-sm transition disabled:opacity-50"
                     >
@@ -249,6 +277,14 @@ function LiveClasses() {
           })}
         </div>
       )}
+       <ConfirmDialog
+      isOpen={confirmDelete.isOpen}
+      title="Delete Live Class"
+      message="Are you sure you want to delete this live class? This action cannot be undone."
+      onCancel={handleCancelDelete}
+      onConfirm={handleConfirmDelete}
+      loading={Boolean(deletingId)}
+    />
     </div>
   );
 }

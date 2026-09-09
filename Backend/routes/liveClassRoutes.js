@@ -54,7 +54,7 @@ router.put(
 router.delete(
   "/:id",
   protect,
-  authorizeRoles("mentor"),
+  authorizeRoles("mentor","admin"),
   deleteLiveClass
 );
 
