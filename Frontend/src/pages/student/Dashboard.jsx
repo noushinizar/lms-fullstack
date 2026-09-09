@@ -8,6 +8,7 @@ import ContinueLearning from "../../components/student/dashboard/ContinueLearnin
 import RecentActivity from "../../components/student/dashboard/RecentActivity";
 import UpcomingTasks from "../../components/student/dashboard/UpcomingTasks";
 import LearningChart from "../../components/student/dashboard/LearningChart";
+import UpcomingLiveClasses from "../../components/student/dashboard/UpcomingLiveClasses";
 
 import { getStudentDashboard } from "../../services/studentDashboardService";
 import LoadingSpinner from "../../components/common/LoadingSpinner";
@@ -51,6 +52,7 @@ function Dashboard() {
 
         <DashboardStats stats={dashboard} />
         <ContinueLearning course={dashboard?.continueCourse} />
+        <UpcomingLiveClasses />
     <div className="grid lg:grid-cols-3 gap-6">
 
     <div className="lg:col-span-2">
