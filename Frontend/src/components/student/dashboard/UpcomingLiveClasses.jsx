@@ -66,7 +66,7 @@ function UpcomingLiveClasses() {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border p-6">
+    <div className="bg-white rounded-2xl shadow-sm p-6">
 
       {/* Header */}
 
@@ -123,7 +123,7 @@ function UpcomingLiveClasses() {
 
             <div
               key={liveClass._id}
-              className="border rounded-xl p-4 hover:shadow-md transition"
+              className="bg-amber-200 rounded-xl p-4 hover:shadow-md transition"
             >
 
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
