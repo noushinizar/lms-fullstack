@@ -83,32 +83,32 @@ function LiveClasses() {
   };
 
   const getStatus = (liveClass) => {
-    if (liveClass.status === "cancelled") {
-      return {
-        label: "Cancelled",
-        className: "bg-red-100 text-red-700",
-      };
-    }
-
-    if (liveClass.status === "completed") {
-      return {
-        label: "Completed",
-        className: "bg-gray-100 text-gray-700",
-      };
-    }
-
-    if (new Date(liveClass.scheduledAt) <= new Date()) {
-      return {
-        label: "Live / Started",
-        className: "bg-green-100 text-green-700",
-      };
-    }
-
+  if (liveClass.status === "cancelled") {
     return {
-      label: "Upcoming",
-      className: "bg-amber-100 text-amber-700",
+      label: "Cancelled",
+      className: "bg-red-100 text-red-700",
     };
+  }
+
+  if (liveClass.status === "completed") {
+    return {
+      label: "Completed",
+      className: "bg-gray-100 text-gray-700",
+    };
+  }
+
+  if (new Date(liveClass.scheduledAt) <= new Date()) {
+    return {
+      label: "Completed",
+      className: "bg-gray-100 text-gray-700",
+    };
+  }
+
+  return {
+    label: "Upcoming",
+    className: "bg-amber-100 text-amber-700",
   };
+};
 
   if (loading) {
     return <LoadingSpinner text="Loading live classes..." />;

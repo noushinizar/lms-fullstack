@@ -93,6 +93,19 @@ export const getMyLiveClasses = async (req, res) => {
 // =====================================================
 export const getAllLiveClasses = async (req, res) => {
   try {
+    const now = new Date();
+
+    // Automatically mark past scheduled classes as completed
+    await LiveClass.updateMany(
+      {
+        scheduledAt: { $lte: now },
+        status: "scheduled",
+      },
+      {
+        $set: { status: "completed" },
+      }
+    );
+
     const liveClasses = await LiveClass.find()
       .populate("courseId", "title")
       .populate("createdBy", "name email")
@@ -101,6 +114,8 @@ export const getAllLiveClasses = async (req, res) => {
     res.json(liveClasses);
 
   } catch (error) {
+    console.error("Get All Live Classes Error:", error);
+
     res.status(500).json({
       message: error.message,
     });
