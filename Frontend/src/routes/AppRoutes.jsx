@@ -26,7 +26,7 @@ import MySubmissions from "../pages/student/MySubmissions";
 import Progress from "../pages/student/Progress";
 import MyCertificates from "../pages/student/MyCertificates";
 import CertificatePreview from "../pages/student/CertificatePreview";
-import LiveClasses from "../pages/student/LiveClasses";
+import StudentLiveClasses from "../pages/student/LiveClasses";
 
 // Admin Pages
 import AdminDashboard from "../pages/admin/Dashboard";
@@ -39,7 +39,7 @@ import MentorCourses from "../pages/mentor/Courses";
 import MentorCourseDetails from "../pages/mentor/CourseDetails";
 import QuestionManagement from "../pages/mentor/QuestionManagement";
 import AssignmentSubmissions from "../pages/mentor/AssignmentSubmissions";
-import LiveClasses from "../pages/mentor/LiveClasses";
+import MentorLiveClasses from "../pages/mentor/LiveClasses";
 
 // Common / Profile
 import Profile from "../pages/profile/Profile";
@@ -338,7 +338,7 @@ function AppRoutes() {
           element={
             <ProtectedRoute role="student">
               <StudentLayout>
-                <LiveClasses />
+               <StudentLiveClasses />
               </StudentLayout>
             </ProtectedRoute>
           }
@@ -393,7 +393,7 @@ function AppRoutes() {
             element={<AssignmentSubmissions />}
           />
 
-          <Route path="/mentor/live-classes" element={<LiveClasses />} />
+          <Route path="/mentor/live-classes" element={<MentorLiveClasses />} />
         </Route>
 
         {/* =================================================
