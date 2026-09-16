@@ -12,19 +12,36 @@ export const getEnrollmentRequests = async (req, res) => {
       .populate("revokedBy", "name")
       .sort({ createdAt: -1 });
 
+    // Attach payment information to each enrollment
+    const enrollmentsWithPayments = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        const payment = await Payment.findOne({
+          studentId: enrollment.studentId?._id,
+          courseId: enrollment.courseId?._id,
+          status: "paid",
+        }).sort({ paidAt: -1 });
+
+        return {
+          enrollment,
+          payment,
+        };
+      })
+    );
+
     res.status(200).json({
       success: true,
-      count: enrollments.length,
-      enrollments,
+      count: enrollmentsWithPayments.length,
+      enrollments: enrollmentsWithPayments,
     });
   } catch (error) {
+    console.error("Get enrollment requests error:", error);
+
     res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
-
 // ===============================================
 // Approve Enrollment
 // ===============================================

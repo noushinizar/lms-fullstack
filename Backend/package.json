@@ -20,6 +20,7 @@
     "mongoose": "^9.6.2",
     "nodemailer": "^9.0.3",
     "puppeteer": "^25.3.0",
+    "razorpay": "^2.9.8",
     "uuid": "^14.0.0"
   },
   "devDependencies": {
