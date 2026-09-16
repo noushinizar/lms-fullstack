@@ -1,5 +1,5 @@
 import Enrollment from "../models/Enrollment.js";
-
+import Payment from "../models/Payment.js";
 // ===============================================
 // Get All Enrollment Requests
 // ===============================================
