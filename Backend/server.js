@@ -22,6 +22,7 @@ import studentDashboardRoutes from "./routes/studentDashboardRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import mentorDashboardRoutes from "./routes/mentorDashboardRoutes.js";
 import liveClassRoutes from "./routes/liveClassRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 
 dotenv.config();
 
@@ -56,6 +57,8 @@ app.use("/api/lessons", lessonRoutes);
 app.use("/api/admin/enrollments", adminEnrollmentRoutes);
 
 app.use("/api/enrollment", enrollmentRoutes);
+
+app.use("/api/payment", paymentRoutes);
 
 app.use("/api/progress", progressRoutes);
 
