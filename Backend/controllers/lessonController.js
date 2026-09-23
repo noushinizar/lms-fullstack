@@ -106,7 +106,38 @@ export const getLessons = async (req, res) => {
       courseId: req.params.courseId,
     }).sort({ order: 1 });
 
-    res.json(lessons);
+    // Only students need lesson locking
+    if (req.user.role !== "student") {
+      return res.json(lessons);
+    }
+
+    const progress = await Progress.findOne({
+      studentId: req.user._id,
+      courseId: req.params.courseId,
+    });
+
+    const completedLessons =
+      progress?.completedLessons?.map((id) => id.toString()) || [];
+
+    const lessonsWithLock = lessons.map((lesson, index) => {
+      let isLocked = false;
+
+      // First lesson is always unlocked
+      if (index > 0) {
+        const previousLesson = lessons[index - 1];
+
+        if (!completedLessons.includes(previousLesson._id.toString())) {
+          isLocked = true;
+        }
+      }
+
+      return {
+        ...lesson.toObject(),
+        isLocked,
+      };
+    });
+
+    res.json(lessonsWithLock);
   } catch (error) {
     res.status(500).json({
       message: error.message,
