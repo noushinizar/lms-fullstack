@@ -30,6 +30,7 @@ export const getMyCertificates = async (req, res) => {
     const certificates = await Certificate.find({
       studentId: req.user._id,
     })
+      .populate("studentId", "name")
       .populate("courseId", "title thumbnail")
       .sort({ issuedAt: -1 });
 
