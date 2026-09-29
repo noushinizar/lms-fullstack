@@ -2,28 +2,46 @@ import puppeteer from "puppeteer";
 import { certificateTemplate } from "../../templates/certificateTemplate.js";
 
 export const generateCertificatePDF = async (certificate) => {
-  const browser = await puppeteer.launch({
-    headless: true,
-  });
+  let browser;
 
   try {
+    // ----------------------------------------------------------
+    // LAUNCH PUPPETEER
+    // ----------------------------------------------------------
+
+    browser = await puppeteer.launch({
+      headless: true,
+
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process",
+      ],
+    });
+
     const page = await browser.newPage();
 
-    // ----------------------------------------------------------
-    // PAGE SETTINGS
-    // ----------------------------------------------------------
-
-    page.setDefaultNavigationTimeout(60000);
-    page.setDefaultTimeout(60000);
+    page.setDefaultNavigationTimeout(30000);
+    page.setDefaultTimeout(30000);
 
     // ----------------------------------------------------------
-    // GENERATE CERTIFICATE HTML
+    // GENERATE HTML
     // ----------------------------------------------------------
 
     const html = certificateTemplate({
-      studentName: certificate.studentId.name,
-      courseName: certificate.courseId.title,
-      certificateId: certificate.certificateId,
+      studentName:
+        certificate.studentId.name,
+
+      courseName:
+        certificate.courseId.title,
+
+      certificateId:
+        certificate.certificateId,
+
       issuedDate: new Date(
         certificate.issuedAt
       ).toLocaleDateString(),
@@ -31,15 +49,19 @@ export const generateCertificatePDF = async (certificate) => {
 
     // ----------------------------------------------------------
     // LOAD HTML
+    //
+    // IMPORTANT:
+    // Do NOT use networkidle0 here.
+    // Remote images can keep the network busy on Render.
     // ----------------------------------------------------------
 
     await page.setContent(html, {
-      waitUntil: "networkidle0",
-      timeout: 60000,
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
     });
 
     // ----------------------------------------------------------
-    // WAIT FOR ALL IMAGES
+    // WAIT FOR IMAGES
     // ----------------------------------------------------------
 
     await page.evaluate(async () => {
@@ -62,15 +84,25 @@ export const generateCertificatePDF = async (certificate) => {
     });
 
     // ----------------------------------------------------------
-    // SMALL DELAY FOR FINAL RENDERING
+    // WAIT FOR FONTS
+    // ----------------------------------------------------------
+
+    await page.evaluate(async () => {
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+    });
+
+    // ----------------------------------------------------------
+    // SHORT RENDER DELAY
     // ----------------------------------------------------------
 
     await new Promise((resolve) =>
-      setTimeout(resolve, 500)
+      setTimeout(resolve, 300)
     );
 
     // ----------------------------------------------------------
-    // GENERATE A4 PORTRAIT PDF
+    // GENERATE PDF
     // ----------------------------------------------------------
 
     const pdf = await page.pdf({
@@ -91,12 +123,21 @@ export const generateCertificatePDF = async (certificate) => {
     });
 
     return pdf;
+  } catch (error) {
+    console.error(
+      "CERTIFICATE PDF GENERATION ERROR:",
+      error
+    );
+
+    throw error;
   } finally {
     // ----------------------------------------------------------
-    // CLOSE BROWSER
+    // ALWAYS CLOSE BROWSER
     // ----------------------------------------------------------
 
-    await browser.close();
+    if (browser) {
+      await browser.close();
+    }
   }
 };
 
