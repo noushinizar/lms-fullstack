@@ -1,137 +1,513 @@
+
 export const certificateTemplate = ({
   studentName,
   courseName,
   certificateId,
   issuedDate,
 }) => {
+  // Prevent HTML characters in dynamic certificate data
+  const escapeHtml = (value = '') =>
+    String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
 
-return `
-<!doctype html>
+  const safeStudentName =
+    escapeHtml(studentName || 'Student');
 
-<html>
-  <head>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        background: #f5f5f5;
-        padding: 40px;
-      }
+  const safeCourseName =
+    escapeHtml(courseName || 'Course');
 
-      .certificate {
-        width: 900px;
-        height: 550px;
+  const safeCertificateId =
+    escapeHtml(certificateId || '');
 
-        margin: auto;
+  const safeIssuedDate =
+    escapeHtml(issuedDate || '');
 
-        background: rgb(247, 235, 231);
+  // Same assets used by the Flutter preview
+  const logoUrl =
+    'https://lms-fullstack-lac.vercel.app/assets/logo-Bpck0D4t.png';
 
-        border: 15px solid #b0521f;
+  const signatureUrl =
+    'https://lms-fullstack-lac.vercel.app/assets/signature-BOYiio2o.png';
 
-        padding: 40px;
+  return `
+<!DOCTYPE html>
 
-        text-align: center;
+<html lang="en">
 
-        position: relative;
-      }
+<head>
 
-      .logo {
-        font-size: 40px;
-        font-weight: bold;
-        color: #a86012;
-      }
+  <meta charset="UTF-8" />
 
-      .title {
-        font-size: 44px;
-        margin-top: 30px;
-        letter-spacing: 5px;
-      }
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
 
-      .subtitle {
-        font-size: 20px;
-        margin-top: 30px;
-      }
+  <title>Certificate</title>
 
-      .student {
-        font-size: 45px;
-        font-weight: bold;
-        color: #ba650b;
+  <style>
 
-        margin: 30px;
-      }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-      .course {
-        font-size: 30px;
-        color: #ba650b;
-      }
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
 
-      .details {
-        margin-top: 50px;
+    html,
+    body {
+      width: 595px;
+      height: 842px;
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+    }
 
-        display: flex;
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #202A3A;
+    }
 
-        justify-content: space-around;
+    /* =========================================================
+       CERTIFICATE
+       ========================================================= */
 
-        font-size: 18px;
-      }
+    .certificate {
+      position: relative;
 
-      .footer {
-        position: absolute;
+      width: 595px;
+      height: 842px;
 
-        bottom: 20px;
+      background: #ffffff;
 
-        left: 0;
+      border: 1px solid #E2E2E2;
 
-        right: 0;
-      }
+      overflow: hidden;
+    }
 
-      .signature {
-        margin-top: 10px;
-      }
-    </style>
-  </head>
+    /* =========================================================
+       MAIN CONTENT
+       ========================================================= */
 
-  <body>
-    <div class="certificate">
-      <div class="logo">ASTROBYTE ACADEMY</div>
+    .main-content {
+      position: absolute;
 
-      <div class="title">COURSE COMPLETION CERTIFICATE</div>
+      top: 63px;
+      left: 36px;
+      right: 36px;
 
-      <div class="subtitle">This certificate is proudly presented to</div>
+      text-align: center;
+    }
 
-      <div class="student">${studentName}</div>
+    /* =========================================================
+       LOGO
+       ========================================================= */
 
-      <div class="subtitle">For successfully completing the course</div>
+    .logo {
+      width: 50px;
+      height: 50px;
 
-      <div class="course">${courseName}</div>
+      object-fit: contain;
 
-      <div class="details">
-        <div>
-          <strong>Certificate ID</strong>
+      display: block;
 
-          <br />
+      margin: 0 auto;
+    }
 
-          ${certificateId}
-        </div>
+    /* =========================================================
+       ACADEMY NAME
+       ========================================================= */
 
-        <div>
-          <strong>Issued Date</strong>
+    .academy-name {
+      margin-top: 25px;
 
-          <br />
+      color: #B9560B;
 
-          ${issuedDate}
-        </div>
+      font-size: 15px;
+
+      font-weight: 800;
+
+      letter-spacing: 4px;
+
+      line-height: 1.2;
+
+      text-align: center;
+    }
+
+    /* =========================================================
+       TITLE
+       ========================================================= */
+
+    .certificate-title {
+      margin-top: 25px;
+
+      color: #202A3A;
+
+      font-family: Georgia, 'Times New Roman', serif;
+
+      font-size: 36px;
+
+      font-weight: 700;
+
+      line-height: 1.15;
+
+      text-align: center;
+    }
+
+    /* =========================================================
+       TITLE DIVIDER
+       ========================================================= */
+
+    .title-divider {
+      width: 180px;
+
+      height: 3px;
+
+      margin: 17px auto 0;
+
+      background: #202A3A;
+    }
+
+    /* =========================================================
+       PRESENTED TO
+       ========================================================= */
+
+    .presented-text {
+      margin-top: 28px;
+
+      color: #737780;
+
+      font-size: 18px;
+
+      font-weight: 400;
+
+      line-height: 1.3;
+
+      text-align: center;
+    }
+
+    /* =========================================================
+       STUDENT NAME
+       ========================================================= */
+
+    .student-name {
+      margin-top: 25px;
+
+      color: #202A3A;
+
+      font-size: 34px;
+
+      font-weight: 800;
+
+      line-height: 1.2;
+
+      text-align: center;
+
+      word-break: break-word;
+    }
+
+    /* =========================================================
+       COMPLETION TEXT
+       ========================================================= */
+
+    .completion-text {
+      margin-top: 34px;
+
+      color: #737780;
+
+      font-size: 18px;
+
+      font-weight: 400;
+
+      line-height: 1.3;
+
+      text-align: center;
+    }
+
+    /* =========================================================
+       COURSE NAME
+       ========================================================= */
+
+    .course-name {
+      margin-top: 25px;
+
+      color: #202A3A;
+
+      font-size: 32px;
+
+      font-weight: 500;
+
+      line-height: 1.4;
+
+      text-align: center;
+
+      word-break: break-word;
+    }
+
+    /* =========================================================
+       BOTTOM INFORMATION
+       ========================================================= */
+
+    .bottom-section {
+      position: absolute;
+
+      left: 48px;
+      right: 48px;
+      bottom: 63px;
+
+      display: flex;
+
+      align-items: flex-end;
+
+      justify-content: space-between;
+    }
+
+    /* =========================================================
+       CERTIFICATE DETAILS
+       ========================================================= */
+
+    .certificate-details {
+      width: 45%;
+
+      text-align: left;
+    }
+
+    .detail-label {
+      color: #737780;
+
+      font-size: 10px;
+
+      font-weight: 400;
+
+      line-height: 1.2;
+    }
+
+    .detail-value {
+      margin-top: 3px;
+
+      color: #000000;
+
+      font-size: 12px;
+
+      font-weight: 500;
+
+      line-height: 1.3;
+
+      word-break: break-word;
+    }
+
+    .issued-date {
+      margin-top: 22px;
+    }
+
+    /* =========================================================
+       SIGNATURE
+       ========================================================= */
+
+    .signature-section {
+      width: 27%;
+
+      text-align: center;
+    }
+
+    .signature-image-container {
+      height: 90px;
+
+      display: flex;
+
+      align-items: flex-end;
+
+      justify-content: center;
+    }
+
+    .signature-image {
+      max-width: 100%;
+
+      max-height: 90px;
+
+      width: auto;
+
+      height: auto;
+
+      object-fit: contain;
+
+      display: block;
+    }
+
+    .signature-line {
+      width: 100%;
+
+      height: 1px;
+
+      margin-top: 0;
+
+      background: #CCCCCC;
+    }
+
+    .signer-name {
+      margin-top: 8px;
+
+      color: #000000;
+
+      font-size: 14px;
+
+      font-weight: 600;
+
+      line-height: 1.2;
+    }
+
+    .signer-role {
+      margin-top: 3px;
+
+      color: #737780;
+
+      font-size: 11px;
+
+      font-weight: 400;
+
+      line-height: 1.2;
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+  <div class="certificate">
+
+    <!-- =====================================================
+         MAIN CERTIFICATE CONTENT
+         ===================================================== -->
+
+    <div class="main-content">
+
+      <!-- LOGO -->
+
+      <img
+        class="logo"
+        src="${logoUrl}"
+        alt="Astrobyte Academy"
+      />
+
+      <!-- ACADEMY NAME -->
+
+      <div class="academy-name">
+        ASTROBYTE ACADEMY
       </div>
 
-      <div class="footer">
-        <div class="signature">
-         <img src="https://img.sanishtech.com/u/ba7110aecaf0207653d8e1ce45e37dcc.png" alt="noushi-sign" width="150" height="150" loading="lazy" style="max-width:100%;height:auto;">
-          <br />
+      <!-- CERTIFICATE TITLE -->
+
+      <div class="certificate-title">
+        Certificate of Completion
+      </div>
+
+      <!-- DIVIDER -->
+
+      <div class="title-divider"></div>
+
+      <!-- PRESENTED TO -->
+
+      <div class="presented-text">
+        This Certificate is Proudly Presented To
+      </div>
+
+      <!-- STUDENT -->
+
+      <div class="student-name">
+        ${safeStudentName}
+      </div>
+
+      <!-- COMPLETION -->
+
+      <div class="completion-text">
+        For Successfully Completing
+      </div>
+
+      <!-- COURSE -->
+
+      <div class="course-name">
+        ${safeCourseName}
+      </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         BOTTOM SECTION
+         ===================================================== -->
+
+    <div class="bottom-section">
+
+      <!-- CERTIFICATE DETAILS -->
+
+      <div class="certificate-details">
+
+        <div class="detail-label">
+          Certificate ID
+        </div>
+
+        <div class="detail-value">
+          ${safeCertificateId}
+        </div>
+
+
+        <div class="issued-date">
+
+          <div class="detail-label">
+            Issued On
+          </div>
+
+          <div class="detail-value">
+            ${safeIssuedDate}
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- SIGNATURE -->
+
+      <div class="signature-section">
+
+        <div class="signature-image-container">
+
+          <img
+            class="signature-image"
+            src="${signatureUrl}"
+            alt="Noushida signature"
+          />
+
+        </div>
+
+        <div class="signature-line"></div>
+
+        <div class="signer-name">
+          Noushida p
+        </div>
+
+        <div class="signer-role">
           Project Manager
         </div>
+
       </div>
+
     </div>
-  </body>
+
+  </div>
+
+</body>
+
 </html>
 `;
-
 };
+
