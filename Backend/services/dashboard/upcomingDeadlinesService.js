@@ -3,12 +3,16 @@ import Assignment from "../../models/Assignment.js";
 import AssignmentSubmission from "../../models/AssignmentSubmission.js";
 import Quiz from "../../models/Quiz.js";
 import QuizResult from "../../models/QuizResult.js";
-import Course from "../../models/Course.js";
 
 export const getUpcomingDeadlines = async (studentId) => {
-  // Student enrolled courses
+
+  // =====================================================
+  // ONLY APPROVED COURSES
+  // =====================================================
+
   const enrollments = await Enrollment.find({
     studentId,
+    status: "approved",
   }).select("courseId");
 
   const courseIds = enrollments.map(
@@ -17,16 +21,26 @@ export const getUpcomingDeadlines = async (studentId) => {
 
   const today = new Date();
 
-  
-  // Assignments
-  
+  // =====================================================
+  // UPCOMING ASSIGNMENTS
+  // =====================================================
 
   const assignments = await Assignment.find({
-    courseId: { $in: courseIds },
-    dueDate: { $gte: today },
+    courseId: {
+      $in: courseIds,
+    },
+    dueDate: {
+      $gte: today,
+    },
   })
     .populate("courseId", "title")
-    .sort({ dueDate: 1 });
+    .sort({
+      dueDate: 1,
+    });
+
+  // =====================================================
+  // ALREADY SUBMITTED ASSIGNMENTS
+  // =====================================================
 
   const submittedAssignments =
     await AssignmentSubmission.find({
@@ -42,6 +56,7 @@ export const getUpcomingDeadlines = async (studentId) => {
     assignments
       .filter(
         (assignment) =>
+          assignment.courseId &&
           !submittedIds.includes(
             assignment._id.toString()
           )
@@ -53,16 +68,26 @@ export const getUpcomingDeadlines = async (studentId) => {
         dueDate: assignment.dueDate,
       }));
 
-  
-  // Quizzes
-  
+  // =====================================================
+  // UPCOMING QUIZZES
+  // =====================================================
 
   const quizzes = await Quiz.find({
-    courseId: { $in: courseIds },
-    dueDate: { $gte: today },
+    courseId: {
+      $in: courseIds,
+    },
+    dueDate: {
+      $gte: today,
+    },
   })
     .populate("courseId", "title")
-    .sort({ dueDate: 1 });
+    .sort({
+      dueDate: 1,
+    });
+
+  // =====================================================
+  // ALREADY ATTEMPTED QUIZZES
+  // =====================================================
 
   const attemptedQuizzes =
     await QuizResult.find({
@@ -78,6 +103,7 @@ export const getUpcomingDeadlines = async (studentId) => {
     quizzes
       .filter(
         (quiz) =>
+          quiz.courseId &&
           !attemptedIds.includes(
             quiz._id.toString()
           )
@@ -89,9 +115,9 @@ export const getUpcomingDeadlines = async (studentId) => {
         dueDate: quiz.dueDate,
       }));
 
-  
-  // Merge + Sort
-  
+  // =====================================================
+  // COMBINE + SORT
+  // =====================================================
 
   const deadlines = [
     ...pendingAssignments,
@@ -106,3 +132,4 @@ export const getUpcomingDeadlines = async (studentId) => {
 
   return deadlines.slice(0, 5);
 };
+
