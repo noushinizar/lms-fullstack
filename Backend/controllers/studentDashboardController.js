@@ -12,22 +12,21 @@ export const getStudentDashboard = async (req, res) => {
   try {
     const studentId = req.user._id;
 
-    
-    // Dashboard Statistics
-
-
-    const totalCourses = await Enrollment.countDocuments({
-      studentId,
-    });
-
     const enrollments = await Enrollment.find({
       studentId,
+      status: "approved",
     }).select("courseId");
 
     const courseIds = enrollments.map(
       (item) => item.courseId
     );
 
+    // Only approved/enrolled courses are counted
+    const totalCourses = courseIds.length;
+
+ 
+
+    // Assignments are only taken from approved courses
     const totalAssignments =
       await Assignment.countDocuments({
         courseId: {
@@ -40,12 +39,20 @@ export const getStudentDashboard = async (req, res) => {
         studentId,
       });
 
-    const pendingAssignments =
-      totalAssignments - submittedAssignments;
+    const pendingAssignments = Math.max(
+      0,
+      totalAssignments - submittedAssignments
+    );
 
+
+    // Only progress belonging to currently approved courses
+    // should affect dashboard progress.
     const progressList =
       await CourseProgress.find({
         studentId,
+        courseId: {
+          $in: courseIds,
+        },
       });
 
     let averageProgress = 0;
@@ -59,13 +66,14 @@ export const getStudentDashboard = async (req, res) => {
       );
     }
 
+    
+
+    // Count completed progress only for approved courses
     const certificates =
       progressList.filter(
         (item) => item.completed
       ).length;
 
-    
-    // Continue Learning
     
 
     let continueCourse = null;
@@ -73,6 +81,9 @@ export const getStudentDashboard = async (req, res) => {
     const courseProgress =
       await CourseProgress.find({
         studentId,
+        courseId: {
+          $in: courseIds,
+        },
         completed: false,
       }).sort({
         progress: -1,
@@ -88,24 +99,25 @@ export const getStudentDashboard = async (req, res) => {
           "title thumbnail"
         );
 
-      const totalLessons =
-        await Lesson.countDocuments({
-          courseId: progress.courseId,
-        });
+      // Make sure the course still exists
+      if (course) {
+        const totalLessons =
+          await Lesson.countDocuments({
+            courseId: progress.courseId,
+          });
 
-      continueCourse = {
-        _id: course._id,
-        title: course.title,
-        thumbnail: course.thumbnail,
-        progress: progress.progress,
-        completedLessons:
-          progress.lessonsCompleted,
-        totalLessons,
-      };
+        continueCourse = {
+          _id: course._id,
+          title: course.title,
+          thumbnail: course.thumbnail,
+          progress: progress.progress,
+          completedLessons:
+            progress.lessonsCompleted,
+          totalLessons,
+        };
+      }
     }
 
-    
-    // Recent Activity
     
 
     const recentLessons =
@@ -114,27 +126,55 @@ export const getStudentDashboard = async (req, res) => {
       })
         .populate(
           "lessonId",
-          "title",
-          
+          "title courseId"
         )
-        
         .sort({
           createdAt: -1,
         })
-        .limit(5);
-       
+        .limit(20);
+
+    // Only keep lessons belonging to approved courses
+    const approvedCourseIdSet =
+      new Set(
+        courseIds.map(
+          (id) => id.toString()
+        )
+      );
+
+    const filteredRecentLessons =
+      recentLessons.filter(
+        (lesson) =>
+          lesson.lessonId &&
+          approvedCourseIdSet.has(
+            lesson.lessonId.courseId?.toString()
+          )
+      );
+
+
     const recentAssignments =
       await AssignmentSubmission.find({
         studentId,
       })
         .populate(
           "assignmentId",
-          "title"
+          "title courseId"
         )
         .sort({
           createdAt: -1,
         })
-        .limit(5);
+        .limit(20);
+
+    // Only keep assignments belonging to approved courses
+    const filteredRecentAssignments =
+      recentAssignments.filter(
+        (assignment) =>
+          assignment.assignmentId &&
+          approvedCourseIdSet.has(
+            assignment.assignmentId.courseId?.toString()
+          )
+      );
+
+    
 
     const recentQuizzes =
       await QuizResult.find({
@@ -142,18 +182,30 @@ export const getStudentDashboard = async (req, res) => {
       })
         .populate(
           "quizId",
-          "title"
+          "title courseId"
         )
         .sort({
           createdAt: -1,
         })
-        .limit(5);
+        .limit(20);
+
+    // Only keep quizzes belonging to approved courses
+    const filteredRecentQuizzes =
+      recentQuizzes.filter(
+        (quiz) =>
+          quiz.quizId &&
+          approvedCourseIdSet.has(
+            quiz.quizId.courseId?.toString()
+          )
+      );
+
+    
 
     const recentActivity = [];
 
-    // Lesson Activity
+  
 
-    recentLessons.forEach(
+    filteredRecentLessons.forEach(
       (lesson) => {
         recentActivity.push({
           type: "lesson",
@@ -163,9 +215,9 @@ export const getStudentDashboard = async (req, res) => {
       }
     );
 
-    // Assignment Activity
 
-    recentAssignments.forEach(
+
+    filteredRecentAssignments.forEach(
       (assignment) => {
         recentActivity.push({
           type: "assignment",
@@ -175,18 +227,18 @@ export const getStudentDashboard = async (req, res) => {
       }
     );
 
-    // Quiz Activity
 
-    recentQuizzes.forEach(
+    filteredRecentQuizzes.forEach(
       (quiz) => {
         recentActivity.push({
           type: "quiz",
-          title: `Completed Quiz`,
+          title: "Completed Quiz",
           date: quiz.createdAt,
         });
       }
     );
 
+    // Sort latest activity first
     recentActivity.sort(
       (a, b) =>
         new Date(b.date) -
@@ -196,28 +248,32 @@ export const getStudentDashboard = async (req, res) => {
     const latestActivity =
       recentActivity.slice(0, 5);
 
-      const upcomingDeadlines =
-  await getUpcomingDeadlines(studentId);
-
     
-    // Response
-    
+    const upcomingDeadlines =
+      await getUpcomingDeadlines(
+        studentId
+      );
 
- res.json({
-  totalCourses,
-  pendingAssignments,
-  averageProgress,
-  certificates,
-  continueCourse,
-  recentActivity: latestActivity,
-  upcomingDeadlines,
-});
+   
+    res.json({
+      totalCourses,
+      pendingAssignments,
+      averageProgress,
+      certificates,
+      continueCourse,
+      recentActivity: latestActivity,
+      upcomingDeadlines,
+    });
 
   } catch (error) {
+    console.error(
+      "STUDENT DASHBOARD ERROR:",
+      error
+    );
 
     res.status(500).json({
       message: error.message,
     });
-
   }
 };
+
