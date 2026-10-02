@@ -33,14 +33,38 @@ const userSchema = new mongoose.Schema(
       default: "student",
     },
 
+    // ================================
+    // PASSWORD RESET OTP
+    // ================================
+
+    resetPasswordOtp: {
+      type: String,
+    },
+
+    resetPasswordOtpExpire: {
+      type: Date,
+    },
+
+    resetPasswordOtpAttempts: {
+      type: Number,
+      default: 0,
+    },
+
+    // ================================
+    // PASSWORD RESET TOKEN
+    // ================================
+
     resetPasswordToken: {
       type: String,
     },
 
-    resetPasswordExpire: {
+    resetPasswordTokenExpire: {
       type: Date,
     },
-  
+
+    // ================================
+    // PROFILE
+    // ================================
 
     avatar: {
       type: String,

@@ -1,9 +1,12 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import generateToken from "../services/auth/generateToken.js";
 import crypto from "crypto";
+import generateToken from "../services/auth/generateToken.js";
 import transporter from "../config/mail.js";
+
+// ======================================================
+// REGISTER USER
+// ======================================================
 
 export const registerUser = async (req, res) => {
   try {
@@ -47,6 +50,10 @@ export const registerUser = async (req, res) => {
   }
 };
 
+// ======================================================
+// LOGIN USER
+// ======================================================
+
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -89,121 +96,348 @@ export const loginUser = async (req, res) => {
   }
 };
 
+// ======================================================
+// FORGOT PASSWORD - SEND OTP
+// ======================================================
+
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found",
+    if (!email) {
+      return res.status(400).json({
+        message: "Email is required",
       });
     }
 
-    // Generate plain token
-    const resetToken = crypto.randomBytes(32).toString("hex");
+    const normalizedEmail = email.trim().toLowerCase();
 
-    // Hash token before saving
-    const hashedToken = crypto
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    // Do not reveal whether the email exists.
+    if (!user) {
+      return res.status(200).json({
+        message:
+          "If an account exists with this email, a verification code has been sent.",
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 1000000).toString();
+
+    // Hash OTP before saving
+    const hashedOtp = crypto
       .createHash("sha256")
-      .update(resetToken)
+      .update(otp)
       .digest("hex");
 
-    user.resetPasswordToken = hashedToken;
+    // OTP expires after 10 minutes
+    user.resetPasswordOtp = hashedOtp;
+    user.resetPasswordOtpExpire = new Date(
+      Date.now() + 10 * 60 * 1000,
+    );
 
-    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+    // Reset attempts
+    user.resetPasswordOtpAttempts = 0;
+
+    // Remove any old reset token
+    user.resetPasswordToken = undefined;
+    user.resetPasswordTokenExpire = undefined;
 
     await user.save();
 
-    const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
-
+    // Send OTP email
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
-
       to: user.email,
 
-      subject: "Password Reset Request",
+      subject: "SkillUp Password Reset Verification Code",
 
       html: `
-        <h2>Password Reset</h2>
-
-        <p>Hello ${user.name},</p>
-
-        <p>Click the button below to reset your password.</p>
-
-        <a
-          href="${resetUrl}"
+        <div
           style="
-            display:inline-block;
-            padding:12px 24px;
-            background:#f59e0b;
-            color:white;
-            text-decoration:none;
-            border-radius:6px;
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: auto;
+            padding: 30px;
+            background: #f8fafc;
           "
         >
-          Reset Password
-        </a>
 
-        <p>This link expires in 15 minutes.</p>
+          <div
+            style="
+              background: #202A3A;
+              padding: 25px;
+              text-align: center;
+              border-radius: 10px 10px 0 0;
+            "
+          >
+            <h1 style="color: #ffffff; margin: 0;">
+              SkillUp
+            </h1>
 
-        <p>If you didn't request this, ignore this email.</p>
+            <p style="color: #f59e0b; margin-top: 8px;">
+              Learning Made Simple
+            </p>
+          </div>
+
+          <div
+            style="
+              background: #ffffff;
+              padding: 30px;
+              border-radius: 0 0 10px 10px;
+            "
+          >
+
+            <h2 style="color: #202A3A;">
+              Password Reset
+            </h2>
+
+            <p>
+              Hello ${user.name},
+            </p>
+
+            <p>
+              We received a request to reset your SkillUp password.
+              Use the verification code below:
+            </p>
+
+            <div
+              style="
+                text-align: center;
+                margin: 30px 0;
+              "
+            >
+              <span
+                style="
+                  display: inline-block;
+                  background: #f59e0b;
+                  color: #ffffff;
+                  font-size: 32px;
+                  font-weight: bold;
+                  letter-spacing: 8px;
+                  padding: 15px 25px;
+                  border-radius: 8px;
+                "
+              >
+                ${otp}
+              </span>
+            </div>
+
+            <p>
+              This verification code will expire in
+              <strong>10 minutes</strong>.
+            </p>
+
+            <p>
+              If you did not request a password reset, you can safely
+              ignore this email.
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb;" />
+
+            <p
+              style="
+                color: #6b7280;
+                font-size: 13px;
+                text-align: center;
+              "
+            >
+              © ${new Date().getFullYear()} SkillUp
+            </p>
+
+          </div>
+        </div>
       `,
     });
 
-    res.status(200).json({
-      message: "Password reset email sent successfully.",
+    return res.status(200).json({
+      message:
+        "If an account exists with this email, a verification code has been sent.",
     });
   } catch (error) {
-    res.status(500).json({
-      message: error.message,
+    console.error("FORGOT PASSWORD ERROR:", error);
+
+    return res.status(500).json({
+      message: "Unable to process password reset request",
     });
   }
 };
 
-export const resetPassword = async (req, res) => {
+// ======================================================
+// VERIFY RESET OTP
+// ======================================================
+
+export const verifyResetOtp = async (req, res) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
+    const { email, otp } = req.body;
 
-    // Hash the received token
-    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    if (!email || !otp) {
+      return res.status(400).json({
+        message: "Email and verification code are required",
+      });
+    }
 
-    // Find matching user
+    const normalizedEmail = email.trim().toLowerCase();
+
     const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpire: { $gt: Date.now() },
+      email: normalizedEmail,
     });
 
     if (!user) {
       return res.status(400).json({
-        message: "Invalid or expired reset token",
+        message: "Invalid verification code",
+      });
+    }
+
+    // Check OTP expiration
+    if (
+      !user.resetPasswordOtpExpire ||
+      user.resetPasswordOtpExpire.getTime() < Date.now()
+    ) {
+      return res.status(400).json({
+        message: "Verification code has expired",
+      });
+    }
+
+    // Maximum OTP attempts
+    if (user.resetPasswordOtpAttempts >= 5) {
+      return res.status(429).json({
+        message:
+          "Too many incorrect attempts. Please request a new verification code.",
+      });
+    }
+
+    // Hash entered OTP
+    const hashedOtp = crypto
+      .createHash("sha256")
+      .update(otp.toString())
+      .digest("hex");
+
+    // Compare OTP
+    if (hashedOtp !== user.resetPasswordOtp) {
+      user.resetPasswordOtpAttempts += 1;
+
+      await user.save();
+
+      return res.status(400).json({
+        message: "Invalid verification code",
+      });
+    }
+
+    // OTP is correct
+    // Generate temporary reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    const hashedResetToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    // Reset token valid for 10 minutes
+    user.resetPasswordToken = hashedResetToken;
+
+    user.resetPasswordTokenExpire = new Date(
+      Date.now() + 10 * 60 * 1000,
+    );
+
+    // OTP should no longer be usable
+    user.resetPasswordOtp = undefined;
+    user.resetPasswordOtpExpire = undefined;
+    user.resetPasswordOtpAttempts = 0;
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Verification successful",
+
+      resetToken,
+    });
+  } catch (error) {
+    console.error("VERIFY OTP ERROR:", error);
+
+    return res.status(500).json({
+      message: "Unable to verify verification code",
+    });
+  }
+};
+
+// ======================================================
+// RESET PASSWORD
+// ======================================================
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { resetToken, password } = req.body;
+
+    if (!resetToken || !password) {
+      return res.status(400).json({
+        message: "Reset token and new password are required",
+      });
+    }
+
+    // Basic password validation
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: "Password must be at least 6 characters long",
+      });
+    }
+
+    // Hash reset token
+    const hashedResetToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    // Find user with valid reset token
+    const user = await User.findOne({
+      resetPasswordToken: hashedResetToken,
+
+      resetPasswordTokenExpire: {
+        $gt: new Date(),
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid or expired reset session",
       });
     }
 
     // Hash new password
     const salt = await bcrypt.genSalt(10);
+
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Update password
     user.password = hashedPassword;
 
-    // Clear reset fields
+    // Clear password reset data
     user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
+    user.resetPasswordTokenExpire = undefined;
+
+    user.resetPasswordOtp = undefined;
+    user.resetPasswordOtpExpire = undefined;
+    user.resetPasswordOtpAttempts = 0;
 
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Password reset successfully",
     });
   } catch (error) {
-    res.status(500).json({
-      message: error.message,
+    console.error("RESET PASSWORD ERROR:", error);
+
+    return res.status(500).json({
+      message: "Unable to reset password",
     });
   }
 };
+
+// ======================================================
+// GET PROFILE
+// ======================================================
 
 export const getProfile = async (req, res) => {
   try {
@@ -219,9 +453,16 @@ export const getProfile = async (req, res) => {
   }
 };
 
+// ======================================================
+// GET MENTORS
+// ======================================================
+
 export const getMentors = async (req, res) => {
   try {
-    const mentors = await User.find({ role: "mentor" }, "name email");
+    const mentors = await User.find(
+      { role: "mentor" },
+      "name email",
+    );
 
     res.status(200).json(mentors);
   } catch (error) {
