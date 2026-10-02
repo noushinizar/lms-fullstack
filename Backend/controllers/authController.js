@@ -2,7 +2,7 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import generateToken from "../services/auth/generateToken.js";
-import transporter from "../config/mail.js";
+import resend from "../config/mail.js";
 
 // ======================================================
 // REGISTER USER
@@ -124,7 +124,10 @@ export const forgotPassword = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    console.log("FORGOT PASSWORD: Looking for user:", normalizedEmail);
+    console.log(
+      "FORGOT PASSWORD: Looking for user:",
+      normalizedEmail,
+    );
 
     const user = await User.findOne({
       email: normalizedEmail,
@@ -142,13 +145,18 @@ export const forgotPassword = async (req, res) => {
       });
     }
 
-    console.log("FORGOT PASSWORD: User found:", user.email);
+    console.log(
+      "FORGOT PASSWORD: User found:",
+      user.email,
+    );
 
     // --------------------------------------------------
     // Generate 6-digit OTP
     // --------------------------------------------------
 
-    const otp = crypto.randomInt(100000, 1000000).toString();
+    const otp = crypto
+      .randomInt(100000, 1000000)
+      .toString();
 
     console.log("FORGOT PASSWORD: OTP generated");
 
@@ -179,163 +187,185 @@ export const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    console.log("FORGOT PASSWORD: OTP saved to database");
+    console.log(
+      "FORGOT PASSWORD: OTP saved to database",
+    );
 
     // --------------------------------------------------
-    // Send email
+    // Send email using Resend
     // --------------------------------------------------
 
-    console.log("FORGOT PASSWORD: Sending email...");
+    console.log(
+      "FORGOT PASSWORD: Sending email...",
+    );
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    const { data, error } =
+      await resend.emails.send({
+        from: "SkillUp <onboarding@resend.dev>",
 
-      to: user.email,
+        to: [user.email],
 
-      subject: "SkillUp Password Reset Verification Code",
+        subject:
+          "SkillUp Password Reset Verification Code",
 
-      html: `
-        <div
-          style="
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 20px auto;
-            background: #f8fafc;
-            border-radius: 10px;
-            overflow: hidden;
-          "
-        >
-
+        html: `
           <div
             style="
-              background: #202A3A;
-              padding: 25px;
-              text-align: center;
-            "
-          >
-            <h1
-              style="
-                color: #ffffff;
-                margin: 0;
-              "
-            >
-              SkillUp
-            </h1>
-
-            <p
-              style="
-                color: #f59e0b;
-                margin: 8px 0 0;
-              "
-            >
-              Learning Made Simple
-            </p>
-          </div>
-
-          <div
-            style="
-              background: #ffffff;
-              padding: 30px;
+              font-family: Arial, sans-serif;
+              max-width: 600px;
+              margin: 20px auto;
+              background: #f8fafc;
+              border-radius: 10px;
+              overflow: hidden;
             "
           >
 
-            <h2 style="color: #202A3A;">
-              Password Reset
-            </h2>
-
-            <p>
-              Hello ${user.name},
-            </p>
-
-            <p>
-              We received a request to reset your SkillUp password.
-              Please use the verification code below.
-            </p>
+            <!-- Header -->
 
             <div
               style="
+                background: #202A3A;
+                padding: 25px;
                 text-align: center;
-                margin: 30px 0;
               "
             >
 
-              <span
+              <h1
                 style="
-                  display: inline-block;
-                  background: #f59e0b;
                   color: #ffffff;
-                  font-size: 32px;
-                  font-weight: bold;
-                  letter-spacing: 8px;
-                  padding: 15px 25px;
-                  border-radius: 8px;
+                  margin: 0;
                 "
               >
-                ${otp}
-              </span>
+                SkillUp
+              </h1>
+
+              <p
+                style="
+                  color: #f59e0b;
+                  margin: 8px 0 0;
+                "
+              >
+                Learning Made Simple
+              </p>
 
             </div>
 
-            <p>
-              This verification code will expire in
-              <strong>10 minutes</strong>.
-            </p>
+            <!-- Content -->
 
-            <p>
-              If you did not request a password reset,
-              you can safely ignore this email.
-            </p>
-
-            <hr
+            <div
               style="
-                border: none;
-                border-top: 1px solid #e5e7eb;
-                margin: 25px 0;
-              "
-            />
-
-            <p
-              style="
-                color: #6b7280;
-                font-size: 13px;
-                text-align: center;
+                background: #ffffff;
+                padding: 30px;
               "
             >
-              © ${new Date().getFullYear()} SkillUp
-            </p>
+
+              <h2
+                style="
+                  color: #202A3A;
+                "
+              >
+                Password Reset
+              </h2>
+
+              <p>
+                Hello ${user.name},
+              </p>
+
+              <p>
+                We received a request to reset your
+                SkillUp password. Please use the
+                verification code below.
+              </p>
+
+              <!-- OTP -->
+
+              <div
+                style="
+                  text-align: center;
+                  margin: 30px 0;
+                "
+              >
+
+                <span
+                  style="
+                    display: inline-block;
+                    background: #f59e0b;
+                    color: #ffffff;
+                    font-size: 32px;
+                    font-weight: bold;
+                    letter-spacing: 8px;
+                    padding: 15px 25px;
+                    border-radius: 8px;
+                  "
+                >
+                  ${otp}
+                </span>
+
+              </div>
+
+              <p>
+                This verification code will expire in
+                <strong>10 minutes</strong>.
+              </p>
+
+              <p>
+                If you did not request a password reset,
+                you can safely ignore this email.
+              </p>
+
+              <hr
+                style="
+                  border: none;
+                  border-top: 1px solid #e5e7eb;
+                  margin: 25px 0;
+                "
+              />
+
+              <p
+                style="
+                  color: #6b7280;
+                  font-size: 13px;
+                  text-align: center;
+                "
+              >
+                © ${new Date().getFullYear()} SkillUp
+              </p>
+
+            </div>
 
           </div>
-        </div>
-      `,
-    };
+        `,
+      });
 
-    /*
-     * Give SMTP a reasonable timeout.
-     *
-     * This prevents the API request from waiting
-     * indefinitely if Gmail is unavailable.
-     */
-    const sendMailPromise = transporter.sendMail(mailOptions);
+    // --------------------------------------------------
+    // Check Resend response
+    // --------------------------------------------------
 
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(new Error("Email service timeout"));
-      }, 15000);
-    });
+    if (error) {
+      console.error(
+        "FORGOT PASSWORD: Resend error:",
+        error,
+      );
 
-    await Promise.race([
-      sendMailPromise,
-      timeoutPromise,
-    ]);
+      return res.status(500).json({
+        message: "Unable to send verification code",
+      });
+    }
 
-    console.log("FORGOT PASSWORD: Email sent successfully");
+    console.log(
+      "FORGOT PASSWORD: Email sent successfully",
+      data?.id,
+    );
 
     return res.status(200).json({
       message:
         "If an account exists with this email, a verification code has been sent.",
     });
   } catch (error) {
-    console.error("FORGOT PASSWORD ERROR:", error);
+    console.error(
+      "FORGOT PASSWORD ERROR:",
+      error,
+    );
 
     return res.status(500).json({
       message: "Unable to send verification code",
@@ -353,11 +383,14 @@ export const verifyResetOtp = async (req, res) => {
 
     if (!email || !otp) {
       return res.status(400).json({
-        message: "Email and verification code are required",
+        message:
+          "Email and verification code are required",
       });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = email
+      .trim()
+      .toLowerCase();
 
     const user = await User.findOne({
       email: normalizedEmail,
@@ -375,7 +408,8 @@ export const verifyResetOtp = async (req, res) => {
 
     if (!user.resetPasswordOtp) {
       return res.status(400).json({
-        message: "No active verification code. Please request a new one.",
+        message:
+          "No active verification code. Please request a new one.",
       });
     }
 
@@ -385,10 +419,12 @@ export const verifyResetOtp = async (req, res) => {
 
     if (
       !user.resetPasswordOtpExpire ||
-      user.resetPasswordOtpExpire.getTime() < Date.now()
+      user.resetPasswordOtpExpire.getTime() <
+        Date.now()
     ) {
       return res.status(400).json({
-        message: "Verification code has expired",
+        message:
+          "Verification code has expired",
       });
     }
 
@@ -426,24 +462,30 @@ export const verifyResetOtp = async (req, res) => {
       });
     }
 
-    console.log("VERIFY OTP: OTP verified successfully");
+    console.log(
+      "VERIFY OTP: OTP verified successfully",
+    );
 
     // --------------------------------------------------
     // Generate temporary reset token
     // --------------------------------------------------
 
-    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetToken = crypto
+      .randomBytes(32)
+      .toString("hex");
 
     const hashedResetToken = crypto
       .createHash("sha256")
       .update(resetToken)
       .digest("hex");
 
-    user.resetPasswordToken = hashedResetToken;
+    user.resetPasswordToken =
+      hashedResetToken;
 
-    user.resetPasswordTokenExpire = new Date(
-      Date.now() + 10 * 60 * 1000,
-    );
+    user.resetPasswordTokenExpire =
+      new Date(
+        Date.now() + 10 * 60 * 1000,
+      );
 
     // --------------------------------------------------
     // Invalidate OTP
@@ -457,17 +499,23 @@ export const verifyResetOtp = async (req, res) => {
 
     await user.save();
 
-    console.log("VERIFY OTP: Reset token generated");
+    console.log(
+      "VERIFY OTP: Reset token generated",
+    );
 
     return res.status(200).json({
       message: "Verification successful",
       resetToken,
     });
   } catch (error) {
-    console.error("VERIFY OTP ERROR:", error);
+    console.error(
+      "VERIFY OTP ERROR:",
+      error,
+    );
 
     return res.status(500).json({
-      message: "Unable to verify verification code",
+      message:
+        "Unable to verify verification code",
     });
   }
 };
@@ -478,11 +526,15 @@ export const verifyResetOtp = async (req, res) => {
 
 export const resetPassword = async (req, res) => {
   try {
-    const { resetToken, password } = req.body;
+    const {
+      resetToken,
+      password,
+    } = req.body;
 
     if (!resetToken || !password) {
       return res.status(400).json({
-        message: "Reset token and new password are required",
+        message:
+          "Reset token and new password are required",
       });
     }
 
@@ -492,7 +544,8 @@ export const resetPassword = async (req, res) => {
 
     if (password.length < 6) {
       return res.status(400).json({
-        message: "Password must be at least 6 characters long",
+        message:
+          "Password must be at least 6 characters long",
       });
     }
 
@@ -510,7 +563,8 @@ export const resetPassword = async (req, res) => {
     // --------------------------------------------------
 
     const user = await User.findOne({
-      resetPasswordToken: hashedResetToken,
+      resetPasswordToken:
+        hashedResetToken,
 
       resetPasswordTokenExpire: {
         $gt: new Date(),
@@ -519,7 +573,8 @@ export const resetPassword = async (req, res) => {
 
     if (!user) {
       return res.status(400).json({
-        message: "Invalid or expired reset session",
+        message:
+          "Invalid or expired reset session",
       });
     }
 
@@ -529,26 +584,33 @@ export const resetPassword = async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
 
-    const hashedPassword = await bcrypt.hash(
-      password,
-      salt,
-    );
+    const hashedPassword =
+      await bcrypt.hash(
+        password,
+        salt,
+      );
 
-    user.password = hashedPassword;
+    user.password =
+      hashedPassword;
 
     // --------------------------------------------------
     // Clear all reset data
     // --------------------------------------------------
 
-    user.resetPasswordToken = undefined;
+    user.resetPasswordToken =
+      undefined;
 
-    user.resetPasswordTokenExpire = undefined;
+    user.resetPasswordTokenExpire =
+      undefined;
 
-    user.resetPasswordOtp = undefined;
+    user.resetPasswordOtp =
+      undefined;
 
-    user.resetPasswordOtpExpire = undefined;
+    user.resetPasswordOtpExpire =
+      undefined;
 
-    user.resetPasswordOtpAttempts = 0;
+    user.resetPasswordOtpAttempts =
+      0;
 
     await user.save();
 
@@ -558,13 +620,18 @@ export const resetPassword = async (req, res) => {
     );
 
     return res.status(200).json({
-      message: "Password reset successfully",
+      message:
+        "Password reset successfully",
     });
   } catch (error) {
-    console.error("RESET PASSWORD ERROR:", error);
+    console.error(
+      "RESET PASSWORD ERROR:",
+      error,
+    );
 
     return res.status(500).json({
-      message: "Unable to reset password",
+      message:
+        "Unable to reset password",
     });
   }
 };
@@ -576,14 +643,19 @@ export const resetPassword = async (req, res) => {
 export const getProfile = async (req, res) => {
   try {
     return res.status(200).json({
-      message: "Profile fetched successfully",
+      message:
+        "Profile fetched successfully",
       user: req.user,
     });
   } catch (error) {
-    console.error("GET PROFILE ERROR:", error);
+    console.error(
+      "GET PROFILE ERROR:",
+      error,
+    );
 
     return res.status(500).json({
-      message: "Unable to fetch profile",
+      message:
+        "Unable to fetch profile",
     });
   }
 };
@@ -599,12 +671,18 @@ export const getMentors = async (req, res) => {
       "name email",
     );
 
-    return res.status(200).json(mentors);
+    return res.status(200).json(
+      mentors,
+    );
   } catch (error) {
-    console.error("GET MENTORS ERROR:", error);
+    console.error(
+      "GET MENTORS ERROR:",
+      error,
+    );
 
     return res.status(500).json({
-      message: "Unable to fetch mentors",
+      message:
+        "Unable to fetch mentors",
     });
   }
 };
