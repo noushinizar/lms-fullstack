@@ -12,7 +12,11 @@ export const registerUser = async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
 
-    const userExists = await User.findOne({ email });
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    const userExists = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (userExists) {
       return res.status(400).json({
@@ -26,13 +30,13 @@ export const registerUser = async (req, res) => {
 
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       phone,
       password: hashedPassword,
       role: "student",
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Registration successful",
 
       user: {
@@ -44,8 +48,10 @@ export const registerUser = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
-      message: error.message,
+    console.error("REGISTER ERROR:", error);
+
+    return res.status(500).json({
+      message: "Registration failed",
     });
   }
 };
@@ -58,7 +64,11 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (!user) {
       return res.status(400).json({
@@ -76,7 +86,7 @@ export const loginUser = async (req, res) => {
 
     const token = generateToken(user._id);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Login successful",
 
       token,
@@ -90,8 +100,10 @@ export const loginUser = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
-      message: error.message,
+    console.error("LOGIN ERROR:", error);
+
+    return res.status(500).json({
+      message: "Login failed",
     });
   }
 };
@@ -112,45 +124,72 @@ export const forgotPassword = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
+    console.log("FORGOT PASSWORD: Looking for user:", normalizedEmail);
+
     const user = await User.findOne({
       email: normalizedEmail,
     });
 
-    // Do not reveal whether the email exists.
+    /*
+     * Do not reveal whether an email exists.
+     */
     if (!user) {
+      console.log("FORGOT PASSWORD: User not found");
+
       return res.status(200).json({
         message:
           "If an account exists with this email, a verification code has been sent.",
       });
     }
 
+    console.log("FORGOT PASSWORD: User found:", user.email);
+
+    // --------------------------------------------------
     // Generate 6-digit OTP
+    // --------------------------------------------------
+
     const otp = crypto.randomInt(100000, 1000000).toString();
 
-    // Hash OTP before saving
+    console.log("FORGOT PASSWORD: OTP generated");
+
+    // --------------------------------------------------
+    // Hash OTP before storing
+    // --------------------------------------------------
+
     const hashedOtp = crypto
       .createHash("sha256")
       .update(otp)
       .digest("hex");
 
-    // OTP expires after 10 minutes
+    // --------------------------------------------------
+    // Save OTP
+    // --------------------------------------------------
+
     user.resetPasswordOtp = hashedOtp;
+
     user.resetPasswordOtpExpire = new Date(
       Date.now() + 10 * 60 * 1000,
     );
 
-    // Reset attempts
     user.resetPasswordOtpAttempts = 0;
 
-    // Remove any old reset token
+    // Remove previous reset token
     user.resetPasswordToken = undefined;
     user.resetPasswordTokenExpire = undefined;
 
     await user.save();
 
-    // Send OTP email
-    await transporter.sendMail({
+    console.log("FORGOT PASSWORD: OTP saved to database");
+
+    // --------------------------------------------------
+    // Send email
+    // --------------------------------------------------
+
+    console.log("FORGOT PASSWORD: Sending email...");
+
+    const mailOptions = {
       from: process.env.EMAIL_USER,
+
       to: user.email,
 
       subject: "SkillUp Password Reset Verification Code",
@@ -160,9 +199,10 @@ export const forgotPassword = async (req, res) => {
           style="
             font-family: Arial, sans-serif;
             max-width: 600px;
-            margin: auto;
-            padding: 30px;
+            margin: 20px auto;
             background: #f8fafc;
+            border-radius: 10px;
+            overflow: hidden;
           "
         >
 
@@ -171,14 +211,23 @@ export const forgotPassword = async (req, res) => {
               background: #202A3A;
               padding: 25px;
               text-align: center;
-              border-radius: 10px 10px 0 0;
             "
           >
-            <h1 style="color: #ffffff; margin: 0;">
+            <h1
+              style="
+                color: #ffffff;
+                margin: 0;
+              "
+            >
               SkillUp
             </h1>
 
-            <p style="color: #f59e0b; margin-top: 8px;">
+            <p
+              style="
+                color: #f59e0b;
+                margin: 8px 0 0;
+              "
+            >
               Learning Made Simple
             </p>
           </div>
@@ -187,7 +236,6 @@ export const forgotPassword = async (req, res) => {
             style="
               background: #ffffff;
               padding: 30px;
-              border-radius: 0 0 10px 10px;
             "
           >
 
@@ -201,7 +249,7 @@ export const forgotPassword = async (req, res) => {
 
             <p>
               We received a request to reset your SkillUp password.
-              Use the verification code below:
+              Please use the verification code below.
             </p>
 
             <div
@@ -210,6 +258,7 @@ export const forgotPassword = async (req, res) => {
                 margin: 30px 0;
               "
             >
+
               <span
                 style="
                   display: inline-block;
@@ -224,6 +273,7 @@ export const forgotPassword = async (req, res) => {
               >
                 ${otp}
               </span>
+
             </div>
 
             <p>
@@ -232,11 +282,17 @@ export const forgotPassword = async (req, res) => {
             </p>
 
             <p>
-              If you did not request a password reset, you can safely
-              ignore this email.
+              If you did not request a password reset,
+              you can safely ignore this email.
             </p>
 
-            <hr style="border: none; border-top: 1px solid #e5e7eb;" />
+            <hr
+              style="
+                border: none;
+                border-top: 1px solid #e5e7eb;
+                margin: 25px 0;
+              "
+            />
 
             <p
               style="
@@ -251,7 +307,28 @@ export const forgotPassword = async (req, res) => {
           </div>
         </div>
       `,
+    };
+
+    /*
+     * Give SMTP a reasonable timeout.
+     *
+     * This prevents the API request from waiting
+     * indefinitely if Gmail is unavailable.
+     */
+    const sendMailPromise = transporter.sendMail(mailOptions);
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("Email service timeout"));
+      }, 15000);
     });
+
+    await Promise.race([
+      sendMailPromise,
+      timeoutPromise,
+    ]);
+
+    console.log("FORGOT PASSWORD: Email sent successfully");
 
     return res.status(200).json({
       message:
@@ -261,7 +338,7 @@ export const forgotPassword = async (req, res) => {
     console.error("FORGOT PASSWORD ERROR:", error);
 
     return res.status(500).json({
-      message: "Unable to process password reset request",
+      message: "Unable to send verification code",
     });
   }
 };
@@ -292,7 +369,20 @@ export const verifyResetOtp = async (req, res) => {
       });
     }
 
+    // --------------------------------------------------
+    // Check OTP existence
+    // --------------------------------------------------
+
+    if (!user.resetPasswordOtp) {
+      return res.status(400).json({
+        message: "No active verification code. Please request a new one.",
+      });
+    }
+
+    // --------------------------------------------------
     // Check OTP expiration
+    // --------------------------------------------------
+
     if (
       !user.resetPasswordOtpExpire ||
       user.resetPasswordOtpExpire.getTime() < Date.now()
@@ -302,7 +392,10 @@ export const verifyResetOtp = async (req, res) => {
       });
     }
 
-    // Maximum OTP attempts
+    // --------------------------------------------------
+    // Check maximum attempts
+    // --------------------------------------------------
+
     if (user.resetPasswordOtpAttempts >= 5) {
       return res.status(429).json({
         message:
@@ -310,13 +403,19 @@ export const verifyResetOtp = async (req, res) => {
       });
     }
 
+    // --------------------------------------------------
     // Hash entered OTP
+    // --------------------------------------------------
+
     const hashedOtp = crypto
       .createHash("sha256")
       .update(otp.toString())
       .digest("hex");
 
+    // --------------------------------------------------
     // Compare OTP
+    // --------------------------------------------------
+
     if (hashedOtp !== user.resetPasswordOtp) {
       user.resetPasswordOtpAttempts += 1;
 
@@ -327,8 +426,12 @@ export const verifyResetOtp = async (req, res) => {
       });
     }
 
-    // OTP is correct
+    console.log("VERIFY OTP: OTP verified successfully");
+
+    // --------------------------------------------------
     // Generate temporary reset token
+    // --------------------------------------------------
+
     const resetToken = crypto.randomBytes(32).toString("hex");
 
     const hashedResetToken = crypto
@@ -336,23 +439,28 @@ export const verifyResetOtp = async (req, res) => {
       .update(resetToken)
       .digest("hex");
 
-    // Reset token valid for 10 minutes
     user.resetPasswordToken = hashedResetToken;
 
     user.resetPasswordTokenExpire = new Date(
       Date.now() + 10 * 60 * 1000,
     );
 
-    // OTP should no longer be usable
+    // --------------------------------------------------
+    // Invalidate OTP
+    // --------------------------------------------------
+
     user.resetPasswordOtp = undefined;
+
     user.resetPasswordOtpExpire = undefined;
+
     user.resetPasswordOtpAttempts = 0;
 
     await user.save();
 
+    console.log("VERIFY OTP: Reset token generated");
+
     return res.status(200).json({
       message: "Verification successful",
-
       resetToken,
     });
   } catch (error) {
@@ -378,20 +486,29 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    // Basic password validation
+    // --------------------------------------------------
+    // Password validation
+    // --------------------------------------------------
+
     if (password.length < 6) {
       return res.status(400).json({
         message: "Password must be at least 6 characters long",
       });
     }
 
+    // --------------------------------------------------
     // Hash reset token
+    // --------------------------------------------------
+
     const hashedResetToken = crypto
       .createHash("sha256")
       .update(resetToken)
       .digest("hex");
 
+    // --------------------------------------------------
     // Find user with valid reset token
+    // --------------------------------------------------
+
     const user = await User.findOne({
       resetPasswordToken: hashedResetToken,
 
@@ -406,22 +523,39 @@ export const resetPassword = async (req, res) => {
       });
     }
 
+    // --------------------------------------------------
     // Hash new password
+    // --------------------------------------------------
+
     const salt = await bcrypt.genSalt(10);
 
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(
+      password,
+      salt,
+    );
 
     user.password = hashedPassword;
 
-    // Clear password reset data
+    // --------------------------------------------------
+    // Clear all reset data
+    // --------------------------------------------------
+
     user.resetPasswordToken = undefined;
+
     user.resetPasswordTokenExpire = undefined;
 
     user.resetPasswordOtp = undefined;
+
     user.resetPasswordOtpExpire = undefined;
+
     user.resetPasswordOtpAttempts = 0;
 
     await user.save();
+
+    console.log(
+      "RESET PASSWORD: Password updated successfully for:",
+      user.email,
+    );
 
     return res.status(200).json({
       message: "Password reset successfully",
@@ -441,14 +575,15 @@ export const resetPassword = async (req, res) => {
 
 export const getProfile = async (req, res) => {
   try {
-    res.status(200).json({
+    return res.status(200).json({
       message: "Profile fetched successfully",
-
       user: req.user,
     });
   } catch (error) {
-    res.status(500).json({
-      message: error.message,
+    console.error("GET PROFILE ERROR:", error);
+
+    return res.status(500).json({
+      message: "Unable to fetch profile",
     });
   }
 };
@@ -464,10 +599,13 @@ export const getMentors = async (req, res) => {
       "name email",
     );
 
-    res.status(200).json(mentors);
+    return res.status(200).json(mentors);
   } catch (error) {
-    res.status(500).json({
-      message: error.message,
+    console.error("GET MENTORS ERROR:", error);
+
+    return res.status(500).json({
+      message: "Unable to fetch mentors",
     });
   }
 };
+
