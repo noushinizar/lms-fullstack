@@ -21,7 +21,7 @@ router.get("/", getCourses);
 
 router.get("/my-courses", protect, authorizeRoles("mentor"), getMentorCourses);
 
-router.get("/:id", protect, getCourseById);
+router.get("/:id", getCourseById);
 
 router.put("/:id", protect, authorizeRoles("admin"), updateCourse);
 
