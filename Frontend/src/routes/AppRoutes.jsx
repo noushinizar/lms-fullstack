@@ -48,7 +48,7 @@ import StudentLayout from "../layouts/StudentLayout";
 // Public
 import PublicLayout from "../layouts/PublicLayout";
 import Home from "../pages/public/Home";
-
+import PublicCourseDetails from "../pages/public/CourseDetails";
 // Authentication
 import ForgotPassword from "../pages/auth/ForgotPassword";
 import ResetPassword from "../pages/auth/ResetPassword";
@@ -146,7 +146,7 @@ function AppRoutes() {
 
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomeRoute />} />
-
+          <Route path="/courses/:id" element={<PublicCourseDetails />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
         </Route>
 
