@@ -20,7 +20,7 @@ setError("");
     }
 
     const response = await fetch(
-      `${API_URL.replace(/\/$/, "")}/api/courses`
+      `${API_URL.replace(/\/$/, "")}/courses`
     );
 
     if (!response.ok) {
