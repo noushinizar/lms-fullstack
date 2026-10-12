@@ -32,6 +32,7 @@ import StudentLiveClasses from "../pages/student/LiveClasses";
 import AdminDashboard from "../pages/admin/Dashboard";
 import Courses from "../pages/admin/Courses";
 import People from "../pages/admin/People";
+import Counselors from "../pages/admin/Counselors";
 
 // Mentor Pages
 import MentorDashboard from "../pages/mentor/Dashboard";
@@ -94,6 +95,9 @@ const getDashboardPath = (role) => {
 
     case "student":
       return "/student/dashboard";
+
+    case "admission_counselor":
+      return "/crm/dashboard";
 
     default:
       return "/";
@@ -363,6 +367,8 @@ function AppRoutes() {
           <Route path="courses" element={<Courses />} />
 
           <Route path="people" element={<People />} />
+
+          <Route path="counselors" element={<Counselors />} />
 
           <Route path="live-classes" element={<AdminLiveClasses />} />
 

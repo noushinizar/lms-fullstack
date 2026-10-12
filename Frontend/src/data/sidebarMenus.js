@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   UserPlus,
+  ContactRound
 } from "lucide-react";
 
 export const sidebarMenus = {
@@ -71,7 +72,7 @@ export const sidebarMenus = {
     },
     {
       name: "Live Classes",
-      icon:  Video,
+      icon: Video,
       path: "/mentor/live-classes",
     },
     {
@@ -102,15 +103,20 @@ export const sidebarMenus = {
       icon: BookOpen,
       path: "/admin/courses",
     },
-     {
-    name: "Live Classes",
-    icon: Video,
-    path: "/admin/live-classes",
-  },
+    {
+      name: "Live Classes",
+      icon: Video,
+      path: "/admin/live-classes",
+    },
     {
       name: "People",
       icon: Users,
       path: "/admin/people",
+    },
+    {
+      name: "Counselors",
+      icon: ContactRound,
+      path: "/admin/counselors",
     },
     {
       name: "Profile",

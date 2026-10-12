@@ -100,7 +100,7 @@ function People() {
 
     return matchesSearch && matchesRole;
   });
-  
+
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">People Management</h1>
@@ -162,6 +162,9 @@ function People() {
                         <option value="student">Student</option>
                         <option value="mentor">Mentor</option>
                         <option value="admin">Admin</option>
+                        <option value="admission_counselor">
+                          Admission Counselor
+                        </option>
                       </select>
                       {isCurrentUser && (
                         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">

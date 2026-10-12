@@ -5,6 +5,21 @@ export const getUsers = async () => {
   return response.data;
 };
 
+export const createCounselor = async (counselorData) => {
+  const response = await api.post("/users/counselors", counselorData);
+  return response.data;
+};
+
+
+export const updateCounselor = async (counselorId, counselorData) => {
+  const response = await api.put(
+    `/users/counselors/${counselorId}`,
+    counselorData
+  );
+
+  return response.data;
+};
+
 export const updateUserRole = async (userId, role) => {
   const response = await api.put(`/users/${userId}/role`, {
     role,
