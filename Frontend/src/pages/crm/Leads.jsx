@@ -380,7 +380,7 @@ function Leads() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[950px] text-left text-sm">
+            <table className="w-full min-w-237.5 text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-5 py-4">Lead</th>
@@ -477,7 +477,7 @@ function Leads() {
 
       {/* Delete confirmation modal */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4">
           <div
             role="alertdialog"
             aria-modal="true"
