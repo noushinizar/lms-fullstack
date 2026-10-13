@@ -80,34 +80,40 @@ function Login() {
   // =========================
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (!validateForm()) {
-      return;
+  if (!validateForm()) {
+    return;
+  }
+
+  try {
+    const data = await loginUser({
+      email: formData.email.trim(),
+      password: formData.password,
+    });
+
+    login(data);
+
+    const role = data.user?.role;
+
+    if (role === "admin") {
+      navigate("/admin/dashboard", { replace: true });
+    } else if (role === "admission_counselor") {
+      navigate("/crm/dashboard", { replace: true });
+    } else if (role === "mentor") {
+      navigate("/mentor/dashboard", { replace: true });
+    } else if (role === "student") {
+      navigate("/student/dashboard", { replace: true });
+    } else {
+      showError("Your account has an unrecognized role.");
+      navigate("/unauthorized", { replace: true });
     }
-
-    try {
-      const data = await loginUser({
-        email: formData.email.trim(),
-        password: formData.password,
-      });
-
-      login(data);
-
-      if (data.user.role === "admin") {
-        navigate("/admin/dashboard");
-      } else if (data.user.role === "mentor") {
-        navigate("/mentor/dashboard");
-      } else {
-        navigate("/student/dashboard");
-      }
-    } catch (error) {
-      showError(
-        error.response?.data?.message || "Login Failed"
-      );
-    }
-  };
-
+  } catch (error) {
+    showError(
+      error.response?.data?.message || "Login Failed"
+    );
+  }
+};
   return (
     <div className="min-h-screen bg-linear-to-br from-amber-200 via-orange-100 to-yellow-100 flex items-center justify-center px-6 py-10">
 

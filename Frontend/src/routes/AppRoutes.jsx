@@ -1,15 +1,26 @@
+
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
+import ForgotPassword from "../pages/auth/ForgotPassword";
+import ResetPassword from "../pages/auth/ResetPassword";
 
 import ProtectedRoute from "../components/common/ProtectedRoute";
+import Unauthorized from "../components/common/Unauthorized";
+import NotFound from "../components/common/NotFound";
 
 // Layouts
 import AdminLayout from "../layouts/AdminLayout";
 import MentorLayout from "../layouts/MentorLayout";
+import StudentLayout from "../layouts/StudentLayout";
+import PublicLayout from "../layouts/PublicLayout";
 
-// Student Pages
+// Public pages
+import Home from "../pages/public/Home";
+import PublicCourseDetails from "../pages/public/CourseDetails";
+
+// Student pages
 import StudentDashboard from "../pages/student/Dashboard";
 import MyCourses from "../pages/student/Courses";
 import CourseDetails from "../pages/student/CourseDetails";
@@ -28,13 +39,15 @@ import MyCertificates from "../pages/student/MyCertificates";
 import CertificatePreview from "../pages/student/CertificatePreview";
 import StudentLiveClasses from "../pages/student/LiveClasses";
 
-// Admin Pages
+// Admin pages
 import AdminDashboard from "../pages/admin/Dashboard";
 import Courses from "../pages/admin/Courses";
 import People from "../pages/admin/People";
 import Counselors from "../pages/admin/Counselors";
+import EnrollmentRequests from "../pages/admin/EnrollmentRequests";
+import AdminLiveClasses from "../pages/admin/LiveClasses";
 
-// Mentor Pages
+// Mentor pages
 import MentorDashboard from "../pages/mentor/Dashboard";
 import MentorCourses from "../pages/mentor/Courses";
 import MentorCourseDetails from "../pages/mentor/CourseDetails";
@@ -42,25 +55,13 @@ import QuestionManagement from "../pages/mentor/QuestionManagement";
 import AssignmentSubmissions from "../pages/mentor/AssignmentSubmissions";
 import MentorLiveClasses from "../pages/mentor/LiveClasses";
 
-// Common / Profile
+// Common pages
 import Profile from "../pages/profile/Profile";
-import StudentLayout from "../layouts/StudentLayout";
 
-// Public
-import PublicLayout from "../layouts/PublicLayout";
-import Home from "../pages/public/Home";
-import PublicCourseDetails from "../pages/public/CourseDetails";
-// Authentication
-import ForgotPassword from "../pages/auth/ForgotPassword";
-import ResetPassword from "../pages/auth/ResetPassword";
-
-// Common
-import Unauthorized from "../components/common/Unauthorized";
-import NotFound from "../components/common/NotFound";
-
-// Admin
-import EnrollmentRequests from "../pages/admin/EnrollmentRequests";
-import AdminLiveClasses from "../pages/admin/LiveClasses";
+// CRM pages
+import CrmDashboard from "../pages/crm/Dashboard";
+import Leads from "../pages/crm/Leads";
+import LeadDetails from "../pages/crm/LeadDetails";
 
 /* =========================================================
    GET LOGGED-IN USER
@@ -69,14 +70,11 @@ import AdminLiveClasses from "../pages/admin/LiveClasses";
 const getStoredUser = () => {
   try {
     const user = localStorage.getItem("user");
-
     return user ? JSON.parse(user) : null;
   } catch (error) {
     console.error("Failed to read stored user:", error);
-
     localStorage.removeItem("user");
     localStorage.removeItem("token");
-
     return null;
   }
 };
@@ -89,16 +87,12 @@ const getDashboardPath = (role) => {
   switch (role) {
     case "admin":
       return "/admin/dashboard";
-
     case "mentor":
       return "/mentor/dashboard";
-
     case "student":
       return "/student/dashboard";
-
     case "admission_counselor":
       return "/crm/dashboard";
-
     default:
       return "/";
   }
@@ -106,8 +100,6 @@ const getDashboardPath = (role) => {
 
 /* =========================================================
    HOME ROUTE
-   - Guest → Landing Page
-   - Logged-in user → Dashboard
 ========================================================= */
 
 function HomeRoute() {
@@ -122,8 +114,6 @@ function HomeRoute() {
 
 /* =========================================================
    PUBLIC AUTH ROUTE
-   - Guest → Login/Register
-   - Logged-in user → Dashboard
 ========================================================= */
 
 function PublicAuthRoute({ children }) {
@@ -144,20 +134,14 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* =================================================
-            PUBLIC WEBSITE
-        ================================================= */}
-
+        {/* PUBLIC WEBSITE */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomeRoute />} />
           <Route path="/courses/:id" element={<PublicCourseDetails />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
         </Route>
 
-        {/* =================================================
-            AUTHENTICATION
-        ================================================= */}
-
+        {/* AUTHENTICATION */}
         <Route
           path="/login"
           element={
@@ -177,13 +161,9 @@ function AppRoutes() {
         />
 
         <Route path="/forgot-password" element={<ForgotPassword />} />
-
         <Route path="/reset-password/:token" element={<ResetPassword />} />
 
-        {/* =================================================
-            STUDENT
-        ================================================= */}
-
+        {/* STUDENT */}
         <Route
           path="/student/dashboard"
           element={
@@ -338,20 +318,19 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/student/live-classes"
           element={
             <ProtectedRoute role="student">
               <StudentLayout>
-               <StudentLiveClasses />
+                <StudentLiveClasses />
               </StudentLayout>
             </ProtectedRoute>
           }
         />
-        {/* =================================================
-            ADMIN
-        ================================================= */}
 
+        {/* ADMIN */}
         <Route
           path="/admin"
           element={
@@ -361,24 +340,15 @@ function AppRoutes() {
           }
         >
           <Route path="dashboard" element={<AdminDashboard />} />
-
           <Route path="enrollments" element={<EnrollmentRequests />} />
-
           <Route path="courses" element={<Courses />} />
-
           <Route path="people" element={<People />} />
-
           <Route path="counselors" element={<Counselors />} />
-
           <Route path="live-classes" element={<AdminLiveClasses />} />
-
           <Route path="profile" element={<Profile />} />
         </Route>
 
-        {/* =================================================
-            MENTOR
-        ================================================= */}
-
+        {/* MENTOR */}
         <Route
           path="/mentor"
           element={
@@ -388,27 +358,35 @@ function AppRoutes() {
           }
         >
           <Route path="dashboard" element={<MentorDashboard />} />
-
           <Route path="courses" element={<MentorCourses />} />
-
           <Route path="course/:id" element={<MentorCourseDetails />} />
-
           <Route path="quizzes/:quizId" element={<QuestionManagement />} />
-
           <Route path="profile" element={<Profile />} />
-
           <Route
             path="assignments/:assignmentId/submissions"
             element={<AssignmentSubmissions />}
           />
-
-          <Route path="/mentor/live-classes" element={<MentorLiveClasses />} />
+          <Route path="live-classes" element={<MentorLiveClasses />} />
         </Route>
 
-        {/* =================================================
-            404
-        ================================================= */}
+        {/* CRM — ADMIN AND ADMISSION COUNSELOR */}
+        <Route
+          path="/crm"
+          element={
+            <ProtectedRoute
+              roles={["admin", "admission_counselor"]}
+            >
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<CrmDashboard />} />
+          <Route path="leads" element={<Leads />} />
+          <Route path="leads/:id" element={<LeadDetails />} />
+        </Route>
 
+        {/* 404 */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

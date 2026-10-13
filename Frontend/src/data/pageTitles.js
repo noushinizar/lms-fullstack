@@ -1,8 +1,5 @@
 const pageTitles = {
- 
   // Student
- 
-
   "/student/dashboard": {
     title: "Dashboard",
     subtitle: "Track your learning progress and continue learning.",
@@ -17,31 +14,32 @@ const pageTitles = {
     title: "My Learning",
     subtitle: "Continue your enrolled courses.",
   },
-  
-"/student/course/:id": {
-  title: "Explore Your Learning",
-  subtitle: "Explore your lessons, assignments, quizzes, and progress.",
-},
 
-"/student/course/:id/lessons": {
-  title: "Lessons",
-  subtitle: "Access and complete your course lessons.",
-},
+  "/student/course/:id": {
+    title: "Explore Your Learning",
+    subtitle: "Explore your lessons, assignments, quizzes, and progress.",
+  },
 
-"/student/course/:id/assignments": {
-  title: "Assignments",
-  subtitle: "View and submit your course assignments.",
-},
+  "/student/course/:id/lessons": {
+    title: "Lessons",
+    subtitle: "Access and complete your course lessons.",
+  },
 
-"/student/course/:id/quizzes": {
-  title: "Quizzes",
-  subtitle: "Take quizzes and test your knowledge.",
-},
+  "/student/course/:id/assignments": {
+    title: "Assignments",
+    subtitle: "View and submit your course assignments.",
+  },
 
-"/student/course/:id/progress": {
-  title: "Progress",
-  subtitle: "Track your learning progress in this course.",
-},
+  "/student/course/:id/quizzes": {
+    title: "Quizzes",
+    subtitle: "Take quizzes and test your knowledge.",
+  },
+
+  "/student/course/:id/progress": {
+    title: "Progress",
+    subtitle: "Track your learning progress in this course.",
+  },
+
   "/student/my-submissions": {
     title: "My Submissions",
     subtitle: "Track your submitted assignments.",
@@ -62,42 +60,46 @@ const pageTitles = {
     subtitle: "Join your upcoming live sessions.",
   },
 
- 
   // Mentor
- 
+  "/mentor/dashboard": {
+    title: "Dashboard",
+    subtitle: "Manage your courses and students.",
+  },
 
-"/mentor/dashboard": {
-  title: "Dashboard",
-  subtitle: "Manage your courses and students.",
-},
+  "/mentor/courses": {
+    title: "Courses",
+    subtitle: "Manage your assigned courses.",
+  },
 
-"/mentor/courses": {
-  title: "Courses",
-  subtitle: "Manage your assigned courses.",
-},
+  "/mentor/course/:id": {
+    title: "Course Details",
+    subtitle: "Manage lessons, quizzes and assignments.",
+  },
 
-"/mentor/course/:id": {
-  title: "Course Details",
-  subtitle: "Manage lessons, quizzes and assignments.",
-},
+  "/mentor/quizzes/:quizId": {
+    title: "Questions",
+    subtitle: "Manage questions.",
+  },
 
-"/mentor/quizzes/:quizId" :{
-  title: "Questions",
-  subtitle: "Manage questions.",
-},
+  "/mentor/live-classes": {
+    title: "Live Classes",
+    subtitle: "Manage your live classes and sessions.",
+  },
 
-"/mentor/profile": {
-  title: "Profile",
-  subtitle: "Manage your mentor account.",
-},
+  "/mentor/profile": {
+    title: "Profile",
+    subtitle: "Manage your mentor account.",
+  },
 
- 
   // Admin
- 
-
   "/admin/dashboard": {
     title: "Dashboard",
     subtitle: "Monitor and manage the entire LMS platform.",
+  },
+
+  "/admin/enrollments": {
+    title: "Enrollment Requests",
+    subtitle: "Review and manage student enrollment requests.",
   },
 
   "/admin/courses": {
@@ -105,10 +107,20 @@ const pageTitles = {
     subtitle: "Manage all courses in the platform.",
   },
 
+  "/admin/live-classes": {
+    title: "Live Classes",
+    subtitle: "Manage live classes across the LMS platform.",
+  },
+
   "/admin/people": {
-  title: "People",
-  subtitle: "Manage students, mentors, and administrators.",
-},
+    title: "People",
+    subtitle: "Manage students, mentors, and administrators.",
+  },
+
+  "/admin/counselors": {
+    title: "Admission Counselors",
+    subtitle: "Manage counselors responsible for student enquiries and admissions.",
+  },
 
   "/admin/profile": {
     title: "Profile",
@@ -118,6 +130,22 @@ const pageTitles = {
   "/admin/settings": {
     title: "Settings",
     subtitle: "Configure your LMS platform.",
+  },
+
+  // CRM
+  "/crm/dashboard": {
+    title: "CRM Dashboard",
+    subtitle: "Track enquiries, follow-ups, and admission conversions.",
+  },
+
+  "/crm/leads": {
+    title: "Leads",
+    subtitle: "Manage enquiries, interested students, and admission follow-ups.",
+  },
+
+  "/crm/leads/:id": {
+    title: "Lead Details",
+    subtitle: "View and update enquiry information, status, and follow-up details.",
   },
 };
 

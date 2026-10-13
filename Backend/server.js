@@ -23,6 +23,7 @@ import profileRoutes from "./routes/profileRoutes.js";
 import mentorDashboardRoutes from "./routes/mentorDashboardRoutes.js";
 import liveClassRoutes from "./routes/liveClassRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import leadRoutes from "./routes/leadRoutes.js";
 
 dotenv.config();
 
@@ -98,6 +99,8 @@ app.use("/api/communication", communicationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 app.use("/api/users", userRoutes);
+
+app.use("/api/leads", leadRoutes);
 
 app.use("/api/live-classes", liveClassRoutes);
 
