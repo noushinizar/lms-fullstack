@@ -1,6 +1,5 @@
-
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Search,
   Plus,
@@ -10,6 +9,11 @@ import {
   Users,
   AlertCircle,
   Trash2,
+  CalendarDays,
+  Clock,
+  CalendarCheck,
+  CalendarClock,
+  CalendarX,
 } from "lucide-react";
 
 import api from "../../services/api";
@@ -52,17 +56,141 @@ const statusStyles = {
   lost: "bg-red-100 text-red-700",
 };
 
+const followUpStyles = {
+  overdue: {
+    label: "Overdue",
+    className: "bg-red-100 text-red-700",
+  },
+  today: {
+    label: "Due Today",
+    className: "bg-amber-100 text-amber-800",
+  },
+  upcoming: {
+    label: "Upcoming",
+    className: "bg-blue-100 text-blue-700",
+  },
+  none: {
+    label: "No Date",
+    className: "bg-gray-100 text-gray-600",
+  },
+};
+
+const followUpFilters = [
+  {
+    value: "all",
+    label: "All Leads",
+    icon: Users,
+    description: "Every matching lead",
+  },
+  {
+    value: "today",
+    label: "Due Today",
+    icon: CalendarCheck,
+    description: "Follow-ups scheduled today",
+  },
+  {
+    value: "overdue",
+    label: "Overdue",
+    icon: Clock,
+    description: "Past-due follow-ups",
+  },
+  {
+    value: "upcoming",
+    label: "Upcoming",
+    icon: CalendarClock,
+    description: "Future follow-ups",
+  },
+  {
+    value: "none",
+    label: "No Date",
+    icon: CalendarX,
+    description: "Leads without a follow-up date",
+  },
+];
+
+const validFollowUpFilters = ["today", "overdue", "upcoming", "none"];
+
+function getValidFollowUpFilter(value) {
+  return validFollowUpFilters.includes(value) ? value : "all";
+}
+
+// Return a local YYYY-MM-DD date without UTC conversion.
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+// Normalize dates so date-only values do not shift between time zones.
+function getFollowUpDateKey(value) {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const match = value.match(/^\d{4}-\d{2}-\d{2}/);
+
+    if (match) {
+      return match[0];
+    }
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return getLocalDateKey(parsed);
+}
+
+function getFollowUpCategory(lead, today) {
+  // Converted and lost leads no longer need active follow-up reminders.
+  if (["converted", "lost"].includes(lead.status)) {
+    return "none";
+  }
+
+  const date = getFollowUpDateKey(lead.followUpDate);
+
+  if (!date) return "none";
+  if (date < today) return "overdue";
+  if (date === today) return "today";
+
+  return "upcoming";
+}
+
+function formatDate(date) {
+  if (!date) return "—";
+
+  const dateKey = getFollowUpDateKey(date);
+
+  if (!dateKey) return "—";
+
+  const [year, month, day] = dateKey.split("-").map(Number);
+
+  return new Date(year, month - 1, day).toLocaleDateString();
+}
+
 function Leads() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [leads, setLeads] = useState([]);
   const [courses, setCourses] = useState([]);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+
+  // Initialize the filter from the dashboard URL, if provided.
+  const [followUpFilter, setFollowUpFilter] = useState(() =>
+    getValidFollowUpFilter(searchParams.get("followUp"))
+  );
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -78,12 +206,37 @@ function Leads() {
     }
   });
 
+  // Keep the selected filter synchronized with URL/browser navigation.
+  useEffect(() => {
+    setFollowUpFilter(
+      getValidFollowUpFilter(searchParams.get("followUp"))
+    );
+  }, [searchParams]);
+
+  // Update the URL whenever a follow-up card is selected.
+  const handleFollowUpFilterChange = (value) => {
+    const validValue = getValidFollowUpFilter(value);
+
+    setFollowUpFilter(validValue);
+
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (validValue === "all") {
+      nextParams.delete("followUp");
+    } else {
+      nextParams.set("followUp", validValue);
+    }
+
+    setSearchParams(nextParams, { replace: true });
+  };
+
   const fetchLeads = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
       const params = {};
+
       if (search.trim()) params.search = search.trim();
       if (statusFilter) params.status = statusFilter;
       if (sourceFilter) params.source = sourceFilter;
@@ -98,7 +251,10 @@ function Leads() {
       );
     } catch (err) {
       console.error("Failed to fetch leads:", err);
-      setError(err.response?.data?.message || "Unable to load leads.");
+
+      setError(
+        err.response?.data?.message || "Unable to load leads."
+      );
     } finally {
       setLoading(false);
     }
@@ -126,6 +282,30 @@ function Leads() {
 
     fetchCourses();
   }, []);
+
+  const today = getLocalDateKey();
+
+  // Counts reflect leads currently loaded after server-side filters.
+  const followUpCounts = {
+    all: leads.length,
+    today: 0,
+    overdue: 0,
+    upcoming: 0,
+    none: 0,
+  };
+
+  leads.forEach((lead) => {
+    const category = getFollowUpCategory(lead, today);
+    followUpCounts[category] += 1;
+  });
+
+  const filteredLeads = leads.filter((lead) => {
+    if (followUpFilter === "all") {
+      return true;
+    }
+
+    return getFollowUpCategory(lead, today) === followUpFilter;
+  });
 
   const handleFormChange = (event) => {
     const { name, value } = event.target;
@@ -157,11 +337,17 @@ function Leads() {
 
       setForm(initialForm);
       setShowForm(false);
+      setFollowUpFilter("all");
+
+      // Clear the URL filter too, so it cannot reapply the old selection.
+      setSearchParams({}, { replace: true });
+
       setSuccess("Lead created successfully.");
 
       await fetchLeads();
     } catch (err) {
       console.error("Failed to create lead:", err);
+
       setError(
         err.response?.data?.message || "Unable to create lead."
       );
@@ -189,10 +375,10 @@ function Leads() {
 
       setSuccess(`Lead "${lead.name}" deleted successfully.`);
 
-      // Refresh to keep the list and dashboard data consistent.
       await fetchLeads();
     } catch (err) {
       console.error("Failed to delete lead:", err);
+
       setError(
         err.response?.data?.message ||
           "Unable to delete lead. Please try again."
@@ -206,16 +392,8 @@ function Leads() {
     setSearch("");
     setStatusFilter("");
     setSourceFilter("");
-  };
-
-  const formatDate = (date) => {
-    if (!date) return "—";
-
-    const parsed = new Date(date);
-
-    return Number.isNaN(parsed.getTime())
-      ? "—"
-      : parsed.toLocaleDateString();
+    setFollowUpFilter("all");
+    setSearchParams({}, { replace: true });
   };
 
   return (
@@ -223,7 +401,10 @@ function Leads() {
       {/* Page heading */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Leads</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Leads
+          </h1>
+
           <p className="mt-2 text-gray-600">
             Manage enquiries and track admission opportunities.
           </p>
@@ -249,8 +430,13 @@ function Leads() {
           role="alert"
           className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700"
         >
-          <AlertCircle size={20} className="mt-0.5 shrink-0" />
+          <AlertCircle
+            size={20}
+            className="mt-0.5 shrink-0"
+          />
+
           <p className="flex-1">{error}</p>
+
           <button
             type="button"
             onClick={() => setError("")}
@@ -267,6 +453,7 @@ function Leads() {
           className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-4 text-green-700"
         >
           <p>{success}</p>
+
           <button
             type="button"
             onClick={() => setSuccess("")}
@@ -277,6 +464,62 @@ function Leads() {
         </div>
       )}
 
+      {/* Follow-up overview */}
+      <section aria-label="Follow-up schedule">
+        <div className="mb-4 flex items-center gap-2">
+          <CalendarDays size={21} className="text-amber-600" />
+
+          <h2 className="text-lg font-bold text-gray-900">
+            Follow-up Schedule
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {followUpFilters.map((filter) => {
+            const Icon = filter.icon;
+            const isActive = followUpFilter === filter.value;
+
+            return (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => handleFollowUpFilterChange(filter.value)}
+                aria-pressed={isActive}
+                className={`rounded-xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                  isActive
+                    ? "border-amber-400 ring-2 ring-amber-100"
+                    : "border-gray-100"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span
+                    className={`rounded-lg p-2 ${
+                      isActive
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    <Icon size={20} />
+                  </span>
+
+                  <span className="text-2xl font-bold text-gray-900">
+                    {loading ? "—" : followUpCounts[filter.value]}
+                  </span>
+                </div>
+
+                <p className="mt-3 font-semibold text-gray-900">
+                  {filter.label}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  {filter.description}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Search and filters */}
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -285,11 +528,13 @@ function Leads() {
               size={19}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
+
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search name, email, or phone..."
+              aria-label="Search leads by name, email, or phone"
               className="w-full rounded-lg border border-gray-200 py-3 pl-10 pr-4 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
             />
           </div>
@@ -297,9 +542,11 @@ function Leads() {
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
+            aria-label="Filter by status"
             className="rounded-lg border border-gray-200 px-3 py-3 outline-none focus:border-amber-500"
           >
             <option value="">All statuses</option>
+
             {statusOptions.map((status) => (
               <option key={status} value={status}>
                 {status.replace("-", " ")}
@@ -310,9 +557,11 @@ function Leads() {
           <select
             value={sourceFilter}
             onChange={(event) => setSourceFilter(event.target.value)}
+            aria-label="Filter by source"
             className="rounded-lg border border-gray-200 px-3 py-3 outline-none focus:border-amber-500"
           >
             <option value="">All sources</option>
+
             {sourceOptions.map((source) => (
               <option key={source} value={source}>
                 {source.replace("-", " ")}
@@ -323,10 +572,12 @@ function Leads() {
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-gray-500">
-            {loading ? "Loading leads..." : `${leads.length} lead(s) found`}
+            {loading
+              ? "Loading leads..."
+              : `${filteredLeads.length} lead(s) found`}
           </p>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={clearFilters}
@@ -345,6 +596,7 @@ function Leads() {
                 size={16}
                 className={loading ? "animate-spin" : ""}
               />
+
               Refresh
             </button>
           </div>
@@ -357,7 +609,7 @@ function Leads() {
           <div className="p-12 text-center text-gray-500">
             Loading leads...
           </div>
-        ) : leads.length === 0 ? (
+        ) : filteredLeads.length === 0 ? (
           <div className="flex flex-col items-center px-6 py-14 text-center">
             <div className="rounded-full bg-amber-50 p-4">
               <Users size={30} className="text-amber-600" />
@@ -366,28 +618,35 @@ function Leads() {
             <h2 className="mt-4 text-lg font-bold text-gray-900">
               No leads found
             </h2>
+
             <p className="mt-2 max-w-md text-sm text-gray-500">
-              Try changing your filters, or add a new enquiry to get started.
+              Try changing your filters, or add a new enquiry to get
+              started.
             </p>
 
             <button
               type="button"
-              onClick={() => setShowForm(true)}
+              onClick={() => {
+                setError("");
+                setSuccess("");
+                setShowForm(true);
+              }}
               className="mt-5 rounded-lg bg-amber-500 px-5 py-2.5 font-semibold text-white hover:bg-amber-600"
             >
-              Add your first lead
+              Add a lead
             </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-237.5 text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+            <table className="w-full min-w-275 text-left text-sm">
+              <thead className="bg-amber-200 text-xs uppercase tracking-wide text-amber-700">
                 <tr>
                   <th className="px-5 py-4">Lead</th>
                   <th className="px-5 py-4">Phone</th>
                   <th className="px-5 py-4">Interested Course</th>
                   <th className="px-5 py-4">Source</th>
                   <th className="px-5 py-4">Status</th>
+                  <th className="px-5 py-4">Follow-up</th>
                   <th className="px-5 py-4">Counselor</th>
                   <th className="px-5 py-4">Created</th>
                   <th className="px-5 py-4">Action</th>
@@ -395,80 +654,110 @@ function Leads() {
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {leads.map((lead) => (
-                  <tr key={lead._id} className="transition hover:bg-gray-50">
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-gray-900">{lead.name}</p>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {lead.email || "No email"}
-                      </p>
-                    </td>
+                {filteredLeads.map((lead) => {
+                  const category = getFollowUpCategory(lead, today);
+                  const followUp = followUpStyles[category];
 
-                    <td className="whitespace-nowrap px-5 py-4 text-gray-600">
-                      {lead.phone}
-                    </td>
+                  return (
+                    <tr
+                      key={lead._id}
+                      className="transition hover:bg-gray-50"
+                    >
+                      <td className="px-5 py-4">
+                        <p className="font-semibold text-gray-900">
+                          {lead.name}
+                        </p>
 
-                    <td className="px-5 py-4 text-gray-600">
-                      {lead.interestedCourse?.title ||
-                        lead.interestedCourse?.name ||
-                        "—"}
-                    </td>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {lead.email || "No email"}
+                        </p>
+                      </td>
 
-                    <td className="px-5 py-4 capitalize text-gray-600">
-                      {(lead.source || "other").replace("-", " ")}
-                    </td>
+                      <td className="whitespace-nowrap px-5 py-4 text-gray-600">
+                        {lead.phone || "—"}
+                      </td>
 
-                    <td className="px-5 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${
-                          statusStyles[lead.status] || "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {(lead.status || "new").replace("-", " ")}
-                      </span>
-                    </td>
+                      <td className="px-5 py-4 text-gray-600">
+                        {lead.interestedCourse?.title ||
+                          lead.interestedCourse?.name ||
+                          "—"}
+                      </td>
 
-                    <td className="px-5 py-4 text-gray-600">
-                      {lead.assignedCounselor?.name || "Unassigned"}
-                    </td>
+                      <td className="px-5 py-4 capitalize text-gray-600">
+                        {(lead.source || "other").replace("-", " ")}
+                      </td>
 
-                    <td className="whitespace-nowrap px-5 py-4 text-gray-500">
-                      {formatDate(lead.createdAt)}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          to={`/crm/leads/${lead._id}`}
-                          aria-label={`View ${lead.name}`}
-                          title="View lead"
-                          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 font-medium text-gray-700 hover:border-amber-400 hover:text-amber-700"
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                            statusStyles[lead.status] ||
+                            "bg-gray-100 text-gray-700"
+                          }`}
                         >
-                          <Eye size={16} />
-                          View
-                        </Link>
+                          {(lead.status || "new").replace("-", " ")}
+                        </span>
+                      </td>
 
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDelete(lead)}
-                            disabled={deletingId !== null}
-                            aria-label={`Delete ${lead.name}`}
-                            title="Delete lead"
-                            className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      <td className="px-5 py-4">
+                        <div className="flex flex-col items-start gap-1.5">
+                          <span
+                            className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${followUp.className}`}
                           >
-                            {deletingId === lead._id ? (
-                              <RefreshCw size={16} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={16} />
-                            )}
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            {followUp.label}
+                          </span>
+
+                          <span className="whitespace-nowrap text-xs text-gray-500">
+                            {formatDate(lead.followUpDate)}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4 text-gray-600">
+                        {lead.assignedCounselor?.name || "Unassigned"}
+                      </td>
+
+                      <td className="whitespace-nowrap px-5 py-4 text-gray-500">
+                        {formatDate(lead.createdAt)}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            to={`/crm/leads/${lead._id}`}
+                            aria-label={`View ${lead.name}`}
+                            title="View lead"
+                            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 font-medium text-gray-700 hover:border-amber-400 hover:text-amber-700"
+                          >
+                            <Eye size={16} />
+                            View
+                          </Link>
+
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDelete(lead)}
+                              disabled={deletingId !== null}
+                              aria-label={`Delete ${lead.name}`}
+                              title="Delete lead"
+                              className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {deletingId === lead._id ? (
+                                <RefreshCw
+                                  size={16}
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <Trash2 size={16} />
+                              )}
+
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -547,9 +836,13 @@ function Leads() {
           >
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
               <div>
-                <h2 id="add-lead-title" className="text-xl font-bold text-gray-900">
+                <h2
+                  id="add-lead-title"
+                  className="text-xl font-bold text-gray-900"
+                >
                   Add New Lead
                 </h2>
+
                 <p className="mt-1 text-sm text-gray-500">
                   Record a new enquiry for Astrobyte Academy.
                 </p>
@@ -569,9 +862,13 @@ function Leads() {
             <form onSubmit={handleCreateLead} className="space-y-5 p-6">
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="name" className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="name"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Full Name *
                   </label>
+
                   <input
                     id="name"
                     name="name"
@@ -585,9 +882,13 @@ function Leads() {
                 </div>
 
                 <div>
-                  <label htmlFor="phone" className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="phone"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Phone Number *
                   </label>
+
                   <input
                     id="phone"
                     name="phone"
@@ -602,9 +903,13 @@ function Leads() {
                 </div>
 
                 <div>
-                  <label htmlFor="email" className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="email"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Email Address
                   </label>
+
                   <input
                     id="email"
                     name="email"
@@ -618,9 +923,13 @@ function Leads() {
                 </div>
 
                 <div>
-                  <label htmlFor="interestedCourse" className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="interestedCourse"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Interested Course
                   </label>
+
                   <select
                     id="interestedCourse"
                     name="interestedCourse"
@@ -629,6 +938,7 @@ function Leads() {
                     className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 outline-none focus:border-amber-500"
                   >
                     <option value="">Not selected</option>
+
                     {courses.map((course) => (
                       <option key={course._id} value={course._id}>
                         {course.title || course.name}
@@ -638,9 +948,13 @@ function Leads() {
                 </div>
 
                 <div>
-                  <label htmlFor="source" className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="source"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Lead Source *
                   </label>
+
                   <select
                     id="source"
                     name="source"
@@ -658,9 +972,13 @@ function Leads() {
                 </div>
 
                 <div>
-                  <label htmlFor="status" className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="status"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Status *
                   </label>
+
                   <select
                     id="status"
                     name="status"
@@ -678,9 +996,13 @@ function Leads() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label htmlFor="followUpDate" className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="followUpDate"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Follow-up Date
                   </label>
+
                   <input
                     id="followUpDate"
                     name="followUpDate"
@@ -692,9 +1014,13 @@ function Leads() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label htmlFor="notes" className="mb-2 block text-sm font-medium text-gray-700">
+                  <label
+                    htmlFor="notes"
+                    className="mb-2 block text-sm font-medium text-gray-700"
+                  >
                     Notes
                   </label>
+
                   <textarea
                     id="notes"
                     name="notes"

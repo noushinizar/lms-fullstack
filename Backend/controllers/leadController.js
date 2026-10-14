@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Lead from "../models/Lead.js";
 import User from "../models/User.js";
 import Course from "../models/Course.js";
+import FollowUp from "../models/FollowUp.js";
 
 const leadStatuses = [
   "new",
@@ -458,3 +459,241 @@ export const deleteLead = async (req, res) => {
     });
   }
 };
+
+
+const followUpTypes = [
+  "call",
+  "whatsapp",
+  "meeting",
+  "email",
+  "other",
+];
+
+const followUpOutcomes = [
+  "interested",
+  "no-answer",
+  "callback-requested",
+  "not-interested",
+  "enrolled",
+  "other",
+];
+
+// Check whether the current user can access this lead.
+const getAccessibleLead = async (leadId, user) => {
+  if (!isValidId(leadId)) {
+    return { error: "invalid-id" };
+  }
+
+  const lead = await Lead.findById(leadId);
+
+  if (!lead) {
+    return { error: "not-found" };
+  }
+
+  if (
+    !isAdmin({ user }) &&
+    String(lead.assignedCounselor) !== String(user._id)
+  ) {
+    return { error: "forbidden" };
+  }
+
+  return { lead };
+};
+
+// Get a lead's follow-up history.
+export const getFollowUps = async (req, res) => {
+  try {
+    const result = await getAccessibleLead(
+      req.params.leadId,
+      req.user
+    );
+
+    if (result.error === "invalid-id") {
+      return res.status(400).json({
+        message: "Invalid lead ID.",
+      });
+    }
+
+    if (result.error === "not-found") {
+      return res.status(404).json({
+        message: "Lead not found.",
+      });
+    }
+
+    if (result.error === "forbidden") {
+      return res.status(403).json({
+        message: "You cannot access this lead's follow-up history.",
+      });
+    }
+
+    const followUps = await FollowUp.find({
+      lead: result.lead._id,
+    })
+      .populate("createdBy", "name email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      count: followUps.length,
+      followUps,
+    });
+  } catch (error) {
+    console.error("Get follow-up history error:", error);
+
+    return res.status(500).json({
+      message: "Unable to retrieve follow-up history.",
+    });
+  }
+};
+
+// Record a new follow-up activity.
+
+export const createFollowUp = async (req, res) => {
+  try {
+    const result = await getAccessibleLead(
+      req.params.leadId,
+      req.user
+    );
+
+    if (result.error === "invalid-id") {
+      return res.status(400).json({
+        message: "Invalid lead ID.",
+      });
+    }
+
+    if (result.error === "not-found") {
+      return res.status(404).json({
+        message: "Lead not found.",
+      });
+    }
+
+    if (result.error === "forbidden") {
+      return res.status(403).json({
+        message: "You cannot add follow-ups to this lead.",
+      });
+    }
+
+    const {
+      type,
+      outcome,
+      notes,
+      nextFollowUpDate,
+    } = req.body;
+
+    if (!followUpTypes.includes(type)) {
+      return res.status(400).json({
+        message: "Invalid follow-up type.",
+      });
+    }
+
+    if (
+      outcome !== undefined &&
+      !followUpOutcomes.includes(outcome)
+    ) {
+      return res.status(400).json({
+        message: "Invalid follow-up outcome.",
+      });
+    }
+
+    if (
+      notes !== undefined &&
+      (typeof notes !== "string" || notes.length > 5000)
+    ) {
+      return res.status(400).json({
+        message: "Follow-up notes cannot exceed 5000 characters.",
+      });
+    }
+
+    if (
+      nextFollowUpDate !== undefined &&
+      nextFollowUpDate !== null &&
+      nextFollowUpDate !== "" &&
+      (
+        typeof nextFollowUpDate !== "string" ||
+        Number.isNaN(Date.parse(nextFollowUpDate))
+      )
+    ) {
+      return res.status(400).json({
+        message: "Invalid next follow-up date.",
+      });
+    }
+
+    // Save the follow-up and lead date as one transaction.
+    const session = await mongoose.startSession();
+    let followUpId;
+
+    try {
+      await session.withTransaction(async () => {
+        // Fetch the latest lead inside the transaction.
+        const lead = await Lead.findById(
+          result.lead._id
+        ).session(session);
+
+        if (!lead) {
+          const error = new Error("Lead not found.");
+          error.statusCode = 404;
+          throw error;
+        }
+
+        // Recheck counselor access before saving.
+        if (
+          !isAdmin(req) &&
+          String(lead.assignedCounselor) !==
+            String(req.user._id)
+        ) {
+          const error = new Error(
+            "You cannot add follow-ups to this lead."
+          );
+          error.statusCode = 403;
+          throw error;
+        }
+
+        const [followUp] = await FollowUp.create(
+          [
+            {
+              lead: lead._id,
+              type,
+              outcome: outcome || "other",
+              notes: notes?.trim() || "",
+              nextFollowUpDate:
+                nextFollowUpDate || null,
+              createdBy: req.user._id,
+            },
+          ],
+          { session }
+        );
+
+        followUpId = followUp._id;
+
+        // Synchronize the lead's scheduled follow-up date.
+        if (nextFollowUpDate !== undefined) {
+          lead.followUpDate = nextFollowUpDate || null;
+          await lead.save({ session });
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    // Return the saved record after the transaction commits.
+    const followUp = await FollowUp.findById(followUpId)
+      .populate("createdBy", "name email");
+
+    return res.status(201).json({
+      message: "Follow-up recorded successfully.",
+      followUp,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+      });
+    }
+
+    console.error("Create follow-up error:", error);
+
+    return res.status(500).json({
+      message: "Unable to record follow-up.",
+    });
+  }
+};
+

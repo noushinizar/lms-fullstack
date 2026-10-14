@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+
 import { Link, useNavigate, useParams } from "react-router-dom";
+
 import {
   ArrowLeft,
   Save,
@@ -12,29 +14,85 @@ import {
   Clock,
   FileText,
   AlertCircle,
+  History,
+  Send,
 } from "lucide-react";
 
 import api from "../../services/api";
 
 const statusOptions = [
   "new",
+
   "contacted",
+
   "interested",
+
   "follow-up",
+
   "converted",
+
   "lost",
 ];
 
 const sourceLabels = {
   website: "Website",
+
   phone: "Phone",
+
   "walk-in": "Walk-in",
+
   referral: "Referral",
+
   "meta-ads": "Meta Ads",
+
   other: "Other",
 };
 
+const followUpTypes = [
+  { value: "call", label: "Phone Call" },
+
+  { value: "whatsapp", label: "WhatsApp" },
+
+  { value: "meeting", label: "Meeting" },
+
+  { value: "email", label: "Email" },
+
+  { value: "other", label: "Other" },
+];
+
+const followUpOutcomes = [
+  { value: "interested", label: "Interested" },
+
+  { value: "no-answer", label: "No Answer" },
+
+  { value: "callback-requested", label: "Callback Requested" },
+
+  { value: "not-interested", label: "Not Interested" },
+
+  { value: "enrolled", label: "Enrolled" },
+
+  { value: "other", label: "Other" },
+];
+
+function formatDateTime(date) {
+  if (!date) return "—";
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) return "—";
+
+  return parsed.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 // Extract arrays from common API response structures.
+
 function extractList(responseData, keys = []) {
   if (Array.isArray(responseData)) {
     return responseData;
@@ -65,7 +123,9 @@ function toDateInputValue(date) {
   if (Number.isNaN(parsed.getTime())) return "";
 
   const year = parsed.getFullYear();
+
   const month = String(parsed.getMonth() + 1).padStart(2, "0");
+
   const day = String(parsed.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
@@ -80,7 +140,9 @@ function formatDate(date) {
 
   return parsed.toLocaleDateString(undefined, {
     day: "numeric",
+
     month: "short",
+
     year: "numeric",
   });
 }
@@ -95,29 +157,63 @@ function getReferenceName(value) {
 
 function LeadDetails() {
   const { id } = useParams();
+
   const navigate = useNavigate();
 
   const [lead, setLead] = useState(null);
+
   const [courses, setCourses] = useState([]);
+
   const [counselors, setCounselors] = useState([]);
 
   const [form, setForm] = useState({
     name: "",
+
     email: "",
+
     phone: "",
+
     interestedCourse: "",
+
     source: "other",
+
     status: "new",
+
     assignedCounselor: "",
+
     followUpDate: "",
+
     notes: "",
   });
 
   const [loading, setLoading] = useState(true);
+
   const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
+
   const [success, setSuccess] = useState("");
+
   const [counselorError, setCounselorError] = useState("");
+
+  const [followUps, setFollowUps] = useState([]);
+
+  const [followUpsLoading, setFollowUpsLoading] = useState(true);
+
+  const [followUpSaving, setFollowUpSaving] = useState(false);
+
+  const [followUpError, setFollowUpError] = useState("");
+
+  const [followUpSuccess, setFollowUpSuccess] = useState("");
+
+  const [followUpForm, setFollowUpForm] = useState({
+    type: "call",
+    outcome: "other",
+    notes: "",
+    nextFollowUpDate: "",
+  });
+
+  const [followUpHistoryError, setFollowUpHistoryError] = useState("");
 
   let currentUser = null;
 
@@ -130,78 +226,86 @@ function LeadDetails() {
   const isAdmin = currentUser?.role === "admin";
 
   // Load the selected lead and populate the editable form.
-  const fetchLead = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
 
-      const response = await api.get(`/leads/${id}`);
-      const data = response.data;
-      const item = data.lead || data;
+  const fetchLead = useCallback(
+    async ({ showLoading = true } = {}) => {
+      try {
+        if (showLoading) setLoading(true);
 
-      setLead(item);
+        setError("");
 
-      setForm({
-        name: item.name || "",
-        email: item.email || "",
-        phone: item.phone || "",
-        interestedCourse:
-          typeof item.interestedCourse === "object"
-            ? item.interestedCourse?._id || ""
-            : item.interestedCourse || "",
-        source: item.source || "other",
-        status: item.status || "new",
-        assignedCounselor:
-          typeof item.assignedCounselor === "object"
-            ? item.assignedCounselor?._id || ""
-            : item.assignedCounselor || "",
-        followUpDate: toDateInputValue(item.followUpDate),
-        notes: item.notes || "",
-      });
-    } catch (err) {
-      console.error("Failed to load lead:", err);
+        const response = await api.get(`/leads/${id}`);
+        const data = response.data;
+        const item = data.lead || data;
 
-      setError(
-        err.response?.data?.message ||
-          "Unable to load this lead. It may not exist or you may not have access."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+        setLead(item);
+
+        setForm({
+          name: item.name || "",
+          email: item.email || "",
+          phone: item.phone || "",
+          interestedCourse:
+            typeof item.interestedCourse === "object"
+              ? item.interestedCourse?._id || ""
+              : item.interestedCourse || "",
+          source: item.source || "other",
+          status: item.status || "new",
+          assignedCounselor:
+            typeof item.assignedCounselor === "object"
+              ? item.assignedCounselor?._id || ""
+              : item.assignedCounselor || "",
+          followUpDate: toDateInputValue(item.followUpDate),
+          notes: item.notes || "",
+        });
+
+        return true;
+      } catch (err) {
+        console.error("Failed to load lead:", err);
+
+        setError(
+          err.response?.data?.message ||
+            "Unable to load this lead. It may not exist or you may not have access.",
+        );
+
+        return false;
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [id],
+  );
 
   useEffect(() => {
     fetchLead();
   }, [fetchLead]);
 
   // Load course options and, for admins, admission counselor options.
+
   useEffect(() => {
     let cancelled = false;
 
     const fetchOptions = async () => {
       const courseRequest = api.get("/courses");
 
-      const counselorRequest = isAdmin
-        ? api.get("/users")
-        : null;
+      const counselorRequest = isAdmin ? api.get("/users") : null;
 
       const [courseResult, counselorResult] = await Promise.allSettled([
         courseRequest,
+
         ...(isAdmin ? [counselorRequest] : []),
       ]);
 
       if (cancelled) return;
 
       if (courseResult.status === "fulfilled") {
-        const courseList = extractList(courseResult.value.data, [
-          "courses",
-        ]);
+        const courseList = extractList(courseResult.value.data, ["courses"]);
 
         setCourses(courseList);
       } else {
         console.error(
           "Failed to load courses:",
-          courseResult.reason
+
+          courseResult.reason,
         );
       }
 
@@ -209,31 +313,35 @@ function LeadDetails() {
         if (counselorResult.status === "fulfilled") {
           const userList = extractList(counselorResult.value.data, [
             "users",
+
             "counselors",
           ]);
 
           const admissionCounselors = userList.filter(
-            (user) => user.role === "admission_counselor"
+            (user) => user.role === "admission_counselor",
           );
 
           setCounselors(admissionCounselors);
+
           setCounselorError("");
 
           if (admissionCounselors.length === 0) {
             setCounselorError(
-              "No admission counselors were returned by the users API."
+              "No admission counselors were returned by the users API.",
             );
           }
         } else {
           console.error(
             "Failed to load admission counselors:",
-            counselorResult.reason
+
+            counselorResult.reason,
           );
 
           setCounselors([]);
+
           setCounselorError(
             counselorResult.reason?.response?.data?.message ||
-              "Unable to load counselors. Check the users API and permissions."
+              "Unable to load counselors. Check the users API and permissions.",
           );
         }
       }
@@ -246,11 +354,94 @@ function LeadDetails() {
     };
   }, [isAdmin]);
 
+  const fetchFollowUps = useCallback(async () => {
+    try {
+      setFollowUpsLoading(true);
+      setFollowUpHistoryError("");
+
+      const response = await api.get(`/leads/${id}/follow-ups`);
+
+      setFollowUps(
+        Array.isArray(response.data?.followUps) ? response.data.followUps : [],
+      );
+    } catch (err) {
+      console.error("Failed to load follow-up history:", err);
+
+      setFollowUpHistoryError(
+        err.response?.data?.message || "Unable to load follow-up history.",
+      );
+    } finally {
+      setFollowUpsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchFollowUps();
+  }, [fetchFollowUps]);
+
+  const handleFollowUpChange = (event) => {
+    const { name, value } = event.target;
+
+    setFollowUpForm((previous) => ({ ...previous, [name]: value }));
+
+    setFollowUpError("");
+
+    setFollowUpSuccess("");
+  };
+
+  const handleFollowUpSubmit = async () => {
+    if (followUpSaving) return;
+
+    setFollowUpSaving(true);
+    setFollowUpError("");
+    setFollowUpSuccess("");
+
+    const payload = {
+      type: followUpForm.type,
+      outcome: followUpForm.outcome,
+      notes: followUpForm.notes.trim(),
+      nextFollowUpDate: followUpForm.nextFollowUpDate || null,
+    };
+
+    try {
+      const response = await api.post(`/leads/${id}/follow-ups`, payload);
+
+      if (!response.data?.followUp?._id) {
+        throw new Error("The server did not confirm the saved follow-up.");
+      }
+
+      // The interaction is saved. Clear the form only after this succeeds.
+      setFollowUpForm({
+        type: "call",
+        outcome: "other",
+        notes: "",
+        nextFollowUpDate: "",
+      });
+
+      setFollowUpSuccess("Follow-up recorded successfully.");
+
+      // Refresh the history and the canonical lead data independently.
+      // Each function handles its own refresh errors.
+      await Promise.all([fetchFollowUps(), fetchLead({ showLoading: false })]);
+    } catch (err) {
+      console.error("Failed to record follow-up:", err);
+
+      setFollowUpError(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to record follow-up. Please try again.",
+      );
+    } finally {
+      setFollowUpSaving(false);
+    }
+  };
+
   const handleChange = (event) => {
     const { name, value } = event.target;
 
     setForm((previous) => ({
       ...previous,
+
       [name]: value,
     }));
 
@@ -262,36 +453,46 @@ function LeadDetails() {
 
     try {
       setSaving(true);
+
       setError("");
+
       setSuccess("");
 
       const payload = {
         name: form.name.trim(),
+
         email: form.email.trim(),
+
         phone: form.phone.trim(),
+
         interestedCourse: form.interestedCourse || null,
+
         source: form.source,
+
         status: form.status,
+
         followUpDate: form.followUpDate || null,
+
         notes: form.notes,
       };
 
       // Only admins can assign or reassign a counselor.
+
       if (isAdmin) {
-        payload.assignedCounselor =
-          form.assignedCounselor || null;
+        payload.assignedCounselor = form.assignedCounselor || null;
       }
 
       await api.put(`/leads/${id}`, payload);
 
       await fetchLead();
+
       setSuccess("Lead details updated successfully.");
     } catch (err) {
       console.error("Failed to update lead:", err);
 
       setError(
         err.response?.data?.message ||
-          "Unable to update this lead. Please try again."
+          "Unable to update this lead. Please try again.",
       );
     } finally {
       setSaving(false);
@@ -312,6 +513,7 @@ function LeadDetails() {
       <div className="space-y-4 rounded-xl bg-white p-8 shadow-sm">
         <div className="flex items-center gap-3 text-red-600">
           <AlertCircle size={24} />
+
           <h1 className="text-xl font-bold">Unable to open lead</h1>
         </div>
 
@@ -333,6 +535,7 @@ function LeadDetails() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {/* Header */}
+
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <Link
@@ -343,9 +546,7 @@ function LeadDetails() {
             Back to Leads
           </Link>
 
-          <h1 className="text-3xl font-bold text-gray-900">
-            Lead Details
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900">Lead Details</h1>
 
           <p className="mt-2 text-gray-600">
             View enquiry information and manage admission follow-ups.
@@ -358,6 +559,7 @@ function LeadDetails() {
       </div>
 
       {/* Feedback */}
+
       {error && (
         <div
           role="alert"
@@ -377,16 +579,17 @@ function LeadDetails() {
       )}
 
       {/* Contact summary */}
+
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="rounded-lg bg-blue-50 p-3 text-blue-600">
             <UserRound size={22} />
           </div>
+
           <div className="min-w-0">
             <p className="text-xs text-gray-500">Lead Name</p>
-            <p className="truncate font-semibold text-gray-900">
-              {lead.name}
-            </p>
+
+            <p className="truncate font-semibold text-gray-900">{lead.name}</p>
           </div>
         </div>
 
@@ -394,8 +597,10 @@ function LeadDetails() {
           <div className="rounded-lg bg-green-50 p-3 text-green-600">
             <Phone size={22} />
           </div>
+
           <div className="min-w-0">
             <p className="text-xs text-gray-500">Phone Number</p>
+
             <p className="truncate font-semibold text-gray-900">
               {lead.phone || "—"}
             </p>
@@ -406,8 +611,10 @@ function LeadDetails() {
           <div className="rounded-lg bg-purple-50 p-3 text-purple-600">
             <Mail size={22} />
           </div>
+
           <div className="min-w-0">
             <p className="text-xs text-gray-500">Email Address</p>
+
             <p className="truncate font-semibold text-gray-900">
               {lead.email || "Not provided"}
             </p>
@@ -416,12 +623,14 @@ function LeadDetails() {
       </section>
 
       {/* Editable lead form */}
+
       <form onSubmit={handleSave} className="space-y-6">
         <section className="rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-6 py-5">
             <h2 className="text-lg font-bold text-gray-900">
               Enquiry Information
             </h2>
+
             <p className="mt-1 text-sm text-gray-500">
               Update the lead's contact and course information.
             </p>
@@ -433,8 +642,9 @@ function LeadDetails() {
                 htmlFor="name"
                 className="mb-2 block text-sm font-medium text-gray-700"
               >
-                Full Name *
+                Full Name
               </label>
+
               <input
                 id="name"
                 name="name"
@@ -451,8 +661,9 @@ function LeadDetails() {
                 htmlFor="phone"
                 className="mb-2 block text-sm font-medium text-gray-700"
               >
-                Phone Number *
+                Phone Number
               </label>
+
               <input
                 id="phone"
                 name="phone"
@@ -472,6 +683,7 @@ function LeadDetails() {
               >
                 Email Address
               </label>
+
               <input
                 id="email"
                 name="email"
@@ -490,6 +702,7 @@ function LeadDetails() {
               >
                 Interested Course
               </label>
+
               <select
                 id="interestedCourse"
                 name="interestedCourse"
@@ -498,6 +711,7 @@ function LeadDetails() {
                 className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 outline-none focus:border-amber-500"
               >
                 <option value="">Not selected</option>
+
                 {courses.map((course) => (
                   <option key={course._id} value={course._id}>
                     {course.title || course.name}
@@ -513,6 +727,7 @@ function LeadDetails() {
               >
                 Lead Source
               </label>
+
               <select
                 id="source"
                 name="source"
@@ -535,6 +750,7 @@ function LeadDetails() {
               >
                 Lead Status
               </label>
+
               <select
                 id="status"
                 name="status"
@@ -551,6 +767,7 @@ function LeadDetails() {
             </div>
 
             {/* Admin-only counselor assignment */}
+
             {isAdmin && (
               <div>
                 <label
@@ -570,11 +787,9 @@ function LeadDetails() {
                   <option value="">Unassigned</option>
 
                   {counselors.map((counselor) => (
-                    <option
-                      key={counselor._id}
-                      value={counselor._id}
-                    >
+                    <option key={counselor._id} value={counselor._id}>
                       {counselor.name}
+
                       {counselor.email ? ` (${counselor.email})` : ""}
                     </option>
                   ))}
@@ -596,6 +811,7 @@ function LeadDetails() {
                 <CalendarDays size={16} />
                 Follow-up Date
               </label>
+
               <input
                 id="followUpDate"
                 name="followUpDate"
@@ -609,13 +825,16 @@ function LeadDetails() {
         </section>
 
         {/* Notes */}
+
         <section className="rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-center gap-3 border-b border-gray-100 px-6 py-5">
             <FileText size={20} className="text-amber-600" />
+
             <div>
               <h2 className="text-lg font-bold text-gray-900">
                 Follow-up Notes
               </h2>
+
               <p className="mt-1 text-sm text-gray-500">
                 Keep enquiry details and follow-up notes together.
               </p>
@@ -629,6 +848,7 @@ function LeadDetails() {
             >
               Notes
             </label>
+
             <textarea
               id="notes"
               name="notes"
@@ -639,16 +859,283 @@ function LeadDetails() {
               placeholder="Record the conversation, student requirements, next steps, and other important details..."
               className="w-full resize-y rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-amber-500"
             />
+
             <p className="mt-2 text-right text-xs text-gray-400">
               {form.notes.length}/5000 characters
             </p>
           </div>
         </section>
 
+        {/* Follow-up History */}
+
+        <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+          <div className="flex items-center gap-3 border-b border-gray-100 px-6 py-5">
+            <div className="rounded-lg bg-amber-50 p-3 text-amber-600">
+              <History size={22} />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Follow-up History
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Record interactions and track the next follow-up.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-5 border-b border-gray-100 bg-gray-50/70 p-6">
+            <h3 className="font-semibold text-gray-900">
+              Record a New Interaction
+            </h3>
+
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="followUpType"
+                  className="mb-2 block text-sm font-medium text-gray-700"
+                >
+                  Interaction Type
+                </label>
+
+                <select
+                  id="followUpType"
+                  name="type"
+                  value={followUpForm.type}
+                  onChange={handleFollowUpChange}
+                  required
+                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 outline-none focus:border-amber-500"
+                >
+                  {followUpTypes.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="followUpOutcome"
+                  className="mb-2 block text-sm font-medium text-gray-700"
+                >
+                  Outcome
+                </label>
+
+                <select
+                  id="followUpOutcome"
+                  name="outcome"
+                  value={followUpForm.outcome}
+                  onChange={handleFollowUpChange}
+                  required
+                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 outline-none focus:border-amber-500"
+                >
+                  {followUpOutcomes.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="followUpNotes"
+                  className="mb-2 block text-sm font-medium text-gray-700"
+                >
+                  Interaction Notes
+                </label>
+
+                <textarea
+                  id="followUpNotes"
+                  name="notes"
+                  value={followUpForm.notes}
+                  onChange={handleFollowUpChange}
+                  rows={3}
+                  maxLength={5000}
+                  placeholder="What did the student say? What action is needed next?"
+                  className="w-full resize-y rounded-lg border border-gray-200 bg-white px-4 py-3 outline-none focus:border-amber-500"
+                />
+
+                <p className="mt-1 text-right text-xs text-gray-400">
+                  {followUpForm.notes.length}/5000 characters
+                </p>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="nextFollowUpDate"
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700"
+                >
+                  <CalendarDays size={16} />
+                  Next Follow-up Date
+                </label>
+
+                <input
+                  id="nextFollowUpDate"
+                  name="nextFollowUpDate"
+                  type="date"
+                  value={followUpForm.nextFollowUpDate}
+                  onChange={handleFollowUpChange}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 outline-none focus:border-amber-500"
+                />
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Leave empty if another follow-up is not scheduled.
+                </p>
+              </div>
+            </div>
+
+            {followUpError && (
+              <div
+                role="alert"
+                className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+              >
+                {followUpError}
+              </div>
+            )}
+
+            {followUpSuccess && (
+              <div
+                role="status"
+                className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700"
+              >
+                {followUpSuccess}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleFollowUpSubmit}
+                disabled={followUpSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 py-3 font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {followUpSaving ? (
+                  <RefreshCw size={18} className="animate-spin" />
+                ) : (
+                  <Send size={18} />
+                )}
+
+                {followUpSaving ? "Recording..." : "Record Follow-up"}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <h3 className="mb-5 font-semibold text-gray-900">
+              Interaction Timeline
+            </h3>
+
+            {followUpsLoading ? (
+              <div className="flex items-center gap-3 py-6 text-gray-500">
+                <RefreshCw size={18} className="animate-spin" />
+                Loading follow-up history...
+              </div>
+            ) : followUpHistoryError ? (
+              <div
+                role="alert"
+                className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+              >
+                <p>{followUpHistoryError}</p>
+
+                <button
+                  type="button"
+                  onClick={fetchFollowUps}
+                  disabled={followUpsLoading}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 font-medium hover:bg-red-50 disabled:opacity-60"
+                >
+                  <RefreshCw
+                    size={15}
+                    className={followUpsLoading ? "animate-spin" : ""}
+                  />
+                  Retry loading history
+                </button>
+              </div>
+            ) : followUps.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 px-5 py-10 text-center">
+                <History className="mx-auto mb-3 text-gray-400" size={30} />
+
+                <p className="font-medium text-gray-700">
+                  No follow-ups recorded yet
+                </p>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Your recorded calls, messages, and meetings will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {followUps.map((item) => {
+                  const typeLabel =
+                    followUpTypes.find((option) => option.value === item.type)
+                      ?.label || item.type;
+
+                  const outcomeLabel =
+                    followUpOutcomes.find(
+                      (option) => option.value === item.outcome,
+                    )?.label || item.outcome;
+
+                  const creator =
+                    typeof item.createdBy === "object"
+                      ? item.createdBy?.name
+                      : "";
+
+                  return (
+                    <article
+                      key={item._id}
+                      className="relative border-l-2 border-amber-200 pl-5"
+                    >
+                      <span className="absolute -left-1.75 top-1 h-3 w-3 rounded-full border-2 border-amber-500 bg-white" />
+
+                      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">
+                            {typeLabel}
+                          </h4>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {formatDateTime(item.createdAt)}
+                          </p>
+                        </div>
+
+                        <span className="w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold capitalize text-amber-700">
+                          {outcomeLabel}
+                        </span>
+                      </div>
+
+                      {item.notes && (
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-700">
+                          {item.notes}
+                        </p>
+                      )}
+
+                      {item.nextFollowUpDate && (
+                        <p className="mt-3 flex items-center gap-2 text-sm text-blue-700">
+                          <CalendarDays size={15} />
+                          Next follow-up: {formatDate(item.nextFollowUpDate)}
+                        </p>
+                      )}
+
+                      {creator && (
+                        <p className="mt-3 text-xs text-gray-500">
+                          Recorded by {creator}
+                        </p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Record information */}
+
         <section className="grid grid-cols-1 gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm sm:grid-cols-3">
           <div>
             <p className="text-xs text-gray-500">Created</p>
+
             <p className="mt-1 font-medium text-gray-800">
               {formatDate(lead.createdAt)}
             </p>
@@ -659,6 +1146,7 @@ function LeadDetails() {
               <Clock size={14} />
               Last Updated
             </p>
+
             <p className="mt-1 font-medium text-gray-800">
               {formatDate(lead.updatedAt)}
             </p>
@@ -669,6 +1157,7 @@ function LeadDetails() {
               <BookOpen size={14} />
               Course
             </p>
+
             <p className="mt-1 font-medium text-gray-800">
               {getReferenceName(lead.interestedCourse)}
             </p>
@@ -676,6 +1165,7 @@ function LeadDetails() {
         </section>
 
         {/* Actions */}
+
         <div className="flex flex-col-reverse justify-between gap-3 sm:flex-row">
           <button
             type="button"
@@ -696,6 +1186,7 @@ function LeadDetails() {
             ) : (
               <Save size={18} />
             )}
+
             {saving ? "Saving Changes..." : "Save Changes"}
           </button>
         </div>
