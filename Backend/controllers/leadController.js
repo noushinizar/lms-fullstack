@@ -1,10 +1,11 @@
-
 import mongoose from "mongoose";
 import Lead from "../models/Lead.js";
 import User from "../models/User.js";
 import Course from "../models/Course.js";
 import FollowUp from "../models/FollowUp.js";
 import LeadActivity from "../models/LeadActivity.js";
+import ExcelJS from "exceljs";
+import { Readable } from "node:stream";
 
 const leadStatuses = [
   "new",
@@ -42,8 +43,7 @@ const isValidId = (id) =>
     ? mongoose.Types.ObjectId.isValid(id)
     : false;
 
-const escapeRegex = (value) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ============================================================
 // AUDIT LABEL HELPERS
@@ -99,12 +99,7 @@ const getFieldLabel = async (field, value, session = null) => {
   return String(value);
 };
 
-const createAuditChange = async (
-  field,
-  oldValue,
-  newValue,
-  session = null,
-) => {
+const createAuditChange = async (field, oldValue, newValue, session = null) => {
   const oldLabel = await getFieldLabel(field, oldValue, session);
   const newLabel = await getFieldLabel(field, newValue, session);
 
@@ -156,17 +151,11 @@ const validateCourse = async (courseId) => {
 
   const course = await Course.findById(courseId).select("_id");
 
-  return course
-    ? { valid: true, value: course._id }
-    : { valid: false };
+  return course ? { valid: true, value: course._id } : { valid: false };
 };
 
 const validateCounselor = async (counselorId) => {
-  if (
-    counselorId === undefined ||
-    counselorId === null ||
-    counselorId === ""
-  ) {
+  if (counselorId === undefined || counselorId === null || counselorId === "") {
     return { valid: true, value: null };
   }
 
@@ -179,9 +168,7 @@ const validateCounselor = async (counselorId) => {
     role: "admission_counselor",
   }).select("_id");
 
-  return counselor
-    ? { valid: true, value: counselor._id }
-    : { valid: false };
+  return counselor ? { valid: true, value: counselor._id } : { valid: false };
 };
 
 // ============================================================
@@ -226,8 +213,7 @@ export const createLead = async (req, res) => {
 
     if (
       normalizedEmail.length > 254 ||
-      (normalizedEmail &&
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
+      (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
     ) {
       return res.status(400).json({ message: "Invalid email address." });
     }
@@ -292,9 +278,7 @@ export const createLead = async (req, res) => {
 
     const initialChanges = [];
 
-    initialChanges.push(
-      await createAuditChange("status", null, lead.status),
-    );
+    initialChanges.push(await createAuditChange("status", null, lead.status));
 
     initialChanges.push(
       await createAuditChange(
@@ -516,8 +500,7 @@ export const updateLead = async (req, res) => {
 
       if (
         normalizedEmail.length > 254 ||
-        (normalizedEmail &&
-          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
+        (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
       ) {
         return res.status(400).json({ message: "Invalid email address." });
       }
@@ -631,18 +614,12 @@ export const updateLead = async (req, res) => {
       if (oldValue === newValue) continue;
 
       changes.push(
-        await createAuditChange(
-          field,
-          oldValue ?? null,
-          newValue ?? null,
-        ),
+        await createAuditChange(field, oldValue ?? null, newValue ?? null),
       );
     }
 
     if (changes.length > 0) {
-      const statusChanged = changes.some(
-        (change) => change.field === "status",
-      );
+      const statusChanged = changes.some((change) => change.field === "status");
 
       const counselorChanged = changes.some(
         (change) => change.field === "assignedCounselor",
@@ -1090,6 +1067,420 @@ export const createFollowUp = async (req, res) => {
 
     return res.status(500).json({
       message: "Unable to record follow-up.",
+    });
+  }
+};
+
+export const importLeads = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        message: "Please upload a CSV or Excel file.",
+      });
+    }
+
+    const fileName = req.file.originalname.toLowerCase();
+
+    if (!fileName.endsWith(".csv") && !fileName.endsWith(".xlsx")) {
+      return res.status(400).json({
+        message: "Only CSV and XLSX files are supported.",
+      });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+
+    if (fileName.endsWith(".csv")) {
+      const csvText = req.file.buffer.toString("utf8").replace(/^\uFEFF/, "");
+
+      const rows = await new Promise((resolve, reject) => {
+        const parsedRows = [];
+
+        const parser = Readable.from([csvText]);
+
+        parser.on("error", reject);
+
+        import("csv-parse")
+          .then(({ parse }) => {
+            parser
+              .pipe(
+                parse({
+                  bom: true,
+                  skip_empty_lines: true,
+                  trim: true,
+                }),
+              )
+              .on("data", (row) => parsedRows.push(row))
+              .on("error", reject)
+              .on("end", () => resolve(parsedRows));
+          })
+          .catch(reject);
+      });
+      const csvWorksheet = workbook.addWorksheet("Leads");
+      rows.forEach((values) => {
+        csvWorksheet.addRow(values);
+      });
+    } else {
+      await workbook.xlsx.load(req.file.buffer);
+    }
+
+    const worksheet = workbook.worksheets[0];
+
+    if (!worksheet || worksheet.rowCount < 2) {
+      return res.status(400).json({
+        message:
+          "The spreadsheet must contain a header row and at least one lead.",
+      });
+    }
+
+    const normalizeHeader = (value) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, "");
+    console.log("IMPORT DEBUG - filename:", req.file.originalname);
+    console.log("IMPORT DEBUG - first row:", worksheet.getRow(1).values);
+    console.log(
+      "IMPORT DEBUG - first cell:",
+      worksheet.getRow(1).getCell(1).value,
+    );
+    const headerRow = worksheet.getRow(1);
+const headers = [];
+
+headerRow.eachCell(
+  { includeEmpty: true },
+  (cell, columnNumber) => {
+    headers[columnNumber] = normalizeHeader(
+      cell.text || cell.value,
+    );
+  },
+);
+
+console.log("EXCEL DEBUG - filename:", req.file.originalname);
+console.log("EXCEL DEBUG - worksheet name:", worksheet.name);
+console.log("EXCEL DEBUG - row 1 values:", worksheet.getRow(1).values);
+console.log("EXCEL DEBUG - normalized headers:", headers);
+    
+    const requiredColumns = ["name", "phone"];
+    const missingColumns = requiredColumns.filter(
+      (column) => !headers.includes(column),
+    );
+
+    if (missingColumns.length > 0) {
+      return res.status(400).json({
+        message: `Missing required columns: ${missingColumns.join(", ")}`,
+      });
+    }
+
+    const lastRow = worksheet.rowCount - 1;
+
+    if (lastRow > 500) {
+      return res.status(400).json({
+        message: "You can import a maximum of 500 lead rows at a time.",
+      });
+    }
+
+    const getValue = (row, columnName) => {
+      const normalizedColumn = normalizeHeader(columnName);
+      const columnIndex = headers.findIndex(
+        (header) => header === normalizedColumn,
+      );
+
+      if (columnIndex === -1) return "";
+
+      const cell = row.getCell(columnIndex);
+      const value = cell.value;
+
+      if (value === null || value === undefined) return "";
+
+      if (typeof value === "object" && !(value instanceof Date)) {
+        if ("text" in value) return String(value.text).trim();
+        if ("result" in value) return String(value.result ?? "").trim();
+        return "";
+      }
+
+      return String(value).trim();
+    };
+
+    const normalizePhone = (value) => String(value ?? "").replace(/\D/g, "");
+
+    const normalizeEmail = (value) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase();
+
+    const validSources = [
+      "website",
+      "phone",
+      "walk-in",
+      "referral",
+      "meta-ads",
+      "other",
+    ];
+
+    const validStatuses = [
+      "new",
+      "contacted",
+      "interested",
+      "follow-up",
+      "converted",
+      "lost",
+    ];
+
+    const [existingLeads, courses, counselors] = await Promise.all([
+      Lead.find({}, "name phone email").lean(),
+      Course.find({}).lean(),
+      isAdmin(req)
+        ? User.find({ role: "admission_counselor" }, "name email").lean()
+        : Promise.resolve([]),
+    ]);
+
+    const existingPhones = new Set(
+      existingLeads.map((lead) => normalizePhone(lead.phone)).filter(Boolean),
+    );
+
+    const existingEmails = new Set(
+      existingLeads.map((lead) => normalizeEmail(lead.email)).filter(Boolean),
+    );
+
+    const courseByName = new Map();
+
+    for (const course of courses) {
+      const courseName = String(course.title || course.name || "")
+        .trim()
+        .toLowerCase();
+
+      if (courseName) {
+        if (!courseByName.has(courseName)) {
+          courseByName.set(courseName, []);
+        }
+
+        courseByName.get(courseName).push(course);
+      }
+    }
+
+    const counselorByName = new Map();
+
+    for (const counselor of counselors) {
+      for (const value of [counselor.name, counselor.email]) {
+        const key = String(value || "")
+          .trim()
+          .toLowerCase();
+
+        if (key) {
+          if (!counselorByName.has(key)) {
+            counselorByName.set(key, []);
+          }
+
+          counselorByName.get(key).push(counselor);
+        }
+      }
+    }
+
+    const results = {
+      totalRows: 0,
+      imported: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
+
+      if (
+        row.values
+          .slice(1)
+          .every(
+            (value) => value === null || value === undefined || value === "",
+          )
+      ) {
+        continue;
+      }
+
+      results.totalRows++;
+
+      try {
+        console.log("IMPORT DEBUG - headers:", headers);
+        console.log("IMPORT DEBUG - row values:", row.values);
+        console.log(
+          "IMPORT DEBUG - phone header index:",
+          headers.indexOf("phone"),
+        );
+        const name = String(getValue(row, "name")).trim();
+        const phone = String(getValue(row, "phone")).trim();
+        const email = normalizeEmail(getValue(row, "email"));
+        const sourceInput = String(getValue(row, "source") || "other")
+          .trim()
+          .toLowerCase();
+        const statusInput = String(getValue(row, "status") || "new")
+          .trim()
+          .toLowerCase();
+
+        if (!name || name.length > 100) {
+          throw new Error(
+            "Name is required and must be at most 100 characters.",
+          );
+        }
+
+        if (!phone || phone.length > 20) {
+          throw new Error(
+            "Phone is required and must be at most 20 characters.",
+          );
+        }
+
+        if (!normalizePhone(phone)) {
+          throw new Error("Phone must contain at least one digit.");
+        }
+
+        if (
+          email &&
+          (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        ) {
+          throw new Error("Please provide a valid email address.");
+        }
+
+        if (!validSources.includes(sourceInput)) {
+          throw new Error(`Invalid source: ${sourceInput}`);
+        }
+
+        if (!validStatuses.includes(statusInput)) {
+          throw new Error(`Invalid status: ${statusInput}`);
+        }
+
+        const normalizedPhone = normalizePhone(phone);
+
+        if (
+          existingPhones.has(normalizedPhone) ||
+          (email && existingEmails.has(email))
+        ) {
+          results.skipped++;
+          results.errors.push({
+            row: rowNumber,
+            reason: "Duplicate phone number or email address.",
+          });
+          continue;
+        }
+
+        let interestedCourse = null;
+        const courseInput = String(getValue(row, "interestedCourse")).trim();
+
+        if (courseInput) {
+          const matches = courseByName.get(courseInput.toLowerCase()) || [];
+
+          if (matches.length !== 1) {
+            throw new Error(
+              matches.length === 0
+                ? `Course not found: ${courseInput}`
+                : `Course name is ambiguous: ${courseInput}`,
+            );
+          }
+
+          interestedCourse = matches[0]._id;
+        }
+
+        let assignedCounselor = null;
+        const counselorInput = String(
+          getValue(row, "assignedCounselor"),
+        ).trim();
+
+        if (counselorInput && !isAdmin(req)) {
+          throw new Error("Only admins can assign leads to counselors.");
+        }
+
+        if (counselorInput && isAdmin(req)) {
+          const matches =
+            counselorByName.get(counselorInput.toLowerCase()) || [];
+
+          if (matches.length !== 1) {
+            throw new Error(
+              matches.length === 0
+                ? `Counselor not found: ${counselorInput}`
+                : `Counselor name/email is ambiguous: ${counselorInput}`,
+            );
+          }
+
+          assignedCounselor = matches[0]._id;
+        } else if (!isAdmin(req)) {
+          assignedCounselor = req.user._id;
+        }
+
+        let followUpDate = null;
+        const followUpInput = getValue(row, "followUpDate");
+
+        if (followUpInput !== "") {
+          let parsedDate;
+
+          if (followUpInput instanceof Date) {
+            parsedDate = followUpInput;
+          } else if (
+            typeof followUpInput === "number" &&
+            fileName.endsWith(".xlsx")
+          ) {
+            parsedDate = new Date(
+              Date.UTC(1899, 11, 30) + followUpInput * 24 * 60 * 60 * 1000,
+            );
+          } else {
+            parsedDate = new Date(String(followUpInput).trim());
+          }
+
+          if (Number.isNaN(parsedDate.getTime())) {
+            throw new Error("Invalid followUpDate.");
+          }
+
+          followUpDate = parsedDate;
+        }
+
+        const notes = String(getValue(row, "notes") ?? "").trim();
+
+        if (notes.length > 5000) {
+          throw new Error("Notes must be at most 5000 characters.");
+        }
+
+        const lead = await Lead.create({
+          name,
+          phone,
+          email,
+          interestedCourse,
+          source: sourceInput,
+          status: statusInput,
+          assignedCounselor,
+          followUpDate,
+          notes,
+          createdBy: req.user._id,
+        });
+
+        await logLeadActivity({
+          leadId: lead._id,
+          userId: req.user._id,
+          action: "lead_created",
+          description: "Lead imported from spreadsheet",
+        });
+
+        existingPhones.add(normalizedPhone);
+
+        if (email) {
+          existingEmails.add(email);
+        }
+
+        results.imported++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push({
+          row: rowNumber,
+          reason: error.message || "Unable to import this row.",
+        });
+      }
+    }
+
+    return res.status(200).json({
+      message: "Spreadsheet import completed.",
+      results,
+    });
+  } catch (error) {
+    console.error("Import leads error:", error);
+
+    return res.status(500).json({
+      message: "Unable to process the spreadsheet.",
     });
   }
 };
