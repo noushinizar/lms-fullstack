@@ -155,6 +155,32 @@ function getReferenceName(value) {
   return value.name || value.title || "—";
 }
 
+const getActivityChangeLabel = (change, side) => {
+  const labelKey = side === "old" ? "oldLabel" : "newLabel";
+  const valueKey = side === "old" ? "oldValue" : "newValue";
+
+  const label = change[labelKey];
+
+  if (label !== undefined && label !== null) {
+    return label;
+  }
+
+  const value = change[valueKey];
+
+  if (value === null || value === undefined || value === "") {
+    return "Not assigned";
+  }
+
+  if (
+    change.field === "interestedCourse" ||
+    change.field === "assignedCounselor"
+  ) {
+    return "Name unavailable";
+  }
+
+  return String(value);
+};
+
 function LeadDetails() {
   const { id } = useParams();
 
@@ -214,6 +240,10 @@ function LeadDetails() {
   });
 
   const [followUpHistoryError, setFollowUpHistoryError] = useState("");
+
+  const [activities, setActivities] = useState([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [activityError, setActivityError] = useState("");
 
   let currentUser = null;
 
@@ -379,6 +409,33 @@ function LeadDetails() {
     fetchFollowUps();
   }, [fetchFollowUps]);
 
+  const fetchLeadActivities = useCallback(async () => {
+    try {
+      setActivitiesLoading(true);
+      setActivityError("");
+
+      const response = await api.get(`/leads/${id}/activities`);
+
+      setActivities(
+        Array.isArray(response.data?.activities)
+          ? response.data.activities
+          : [],
+      );
+    } catch (err) {
+      console.error("Failed to load lead activity history:", err);
+
+      setActivityError(
+        err.response?.data?.message || "Unable to load lead activity history.",
+      );
+    } finally {
+      setActivitiesLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchLeadActivities();
+  }, [fetchLeadActivities]);
+
   const handleFollowUpChange = (event) => {
     const { name, value } = event.target;
 
@@ -422,7 +479,11 @@ function LeadDetails() {
 
       // Refresh the history and the canonical lead data independently.
       // Each function handles its own refresh errors.
-      await Promise.all([fetchFollowUps(), fetchLead({ showLoading: false })]);
+      await Promise.all([
+        fetchFollowUps(),
+        fetchLead({ showLoading: false }),
+        fetchLeadActivities(),
+      ]);
     } catch (err) {
       console.error("Failed to record follow-up:", err);
 
@@ -484,7 +545,7 @@ function LeadDetails() {
 
       await api.put(`/leads/${id}`, payload);
 
-      await fetchLead();
+      await Promise.all([fetchLead(), fetchLeadActivities()]);
 
       setSuccess("Lead details updated successfully.");
     } catch (err) {
@@ -1122,6 +1183,174 @@ function LeadDetails() {
                           Recorded by {creator}
                         </p>
                       )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Lead Activity Audit Trail */}
+        <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+          <div className="flex items-center gap-3 border-b border-gray-100 px-6 py-5">
+            <div className="rounded-lg bg-purple-50 p-3 text-purple-600">
+              <History size={22} />
+            </div>
+
+            <div className="flex-1">
+              <h2 className="text-lg font-bold text-gray-900">
+                Lead Activity Timeline
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Track changes made to this lead and who made them.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={fetchLeadActivities}
+              disabled={activitiesLoading}
+              aria-label="Refresh activity history"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            >
+              <RefreshCw
+                size={16}
+                className={activitiesLoading ? "animate-spin" : ""}
+              />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+          </div>
+
+          <div className="p-6">
+            {activitiesLoading ? (
+              <div className="flex items-center gap-3 py-6 text-gray-500">
+                <RefreshCw size={18} className="animate-spin" />
+                Loading activity history...
+              </div>
+            ) : activityError ? (
+              <div
+                role="alert"
+                className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+              >
+                <p>{activityError}</p>
+
+                <button
+                  type="button"
+                  onClick={fetchLeadActivities}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 font-medium hover:bg-red-50"
+                >
+                  <RefreshCw size={15} />
+                  Retry loading activities
+                </button>
+              </div>
+            ) : activities.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 px-5 py-10 text-center">
+                <History className="mx-auto mb-3 text-gray-400" size={30} />
+                <p className="font-medium text-gray-700">
+                  No activities recorded yet
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Lead creation and future changes will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {activities.map((activity) => {
+                  const performer =
+                    typeof activity.performedBy === "object"
+                      ? activity.performedBy
+                      : null;
+
+                  return (
+                    <article
+                      key={activity._id}
+                      className="relative border-l-2 border-purple-200 pl-5"
+                    >
+                      <span className="absolute -left-1.75 top-1 h-3 w-3 rounded-full border-2 border-purple-500 bg-white" />
+
+                      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            {activity.action
+                              ?.replace(/_/g, " ")
+                              .replace(/\b\w/g, (char) => char.toUpperCase()) ||
+                              "Lead Activity"}
+                          </h3>
+
+                          <p className="mt-1 text-sm leading-6 text-gray-700">
+                            {activity.description}
+                          </p>
+
+                          <p className="mt-2 text-xs text-gray-500">
+                            {formatDateTime(activity.createdAt)}
+                          </p>
+                        </div>
+
+                        <span className="w-fit rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700">
+                          Audit Log
+                        </span>
+                      </div>
+
+                      {Array.isArray(activity.changes) &&
+                        activity.changes.length > 0 && (
+                          <div className="mt-3 space-y-2 rounded-lg bg-gray-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                              Changes
+                            </p>
+
+                            {activity.changes.map((change, index) => {
+                              const displayValue = (value) => {
+                                if (
+                                  value === null ||
+                                  value === undefined ||
+                                  value === ""
+                                ) {
+                                  return "—";
+                                }
+
+                                if (typeof value === "object") {
+                                  return (
+                                    value.name ||
+                                    value.title ||
+                                    value.email ||
+                                    JSON.stringify(value)
+                                  );
+                                }
+
+                                return String(value);
+                              };
+
+                              return (
+                                <div
+                                  key={`${change.field}-${index}`}
+                                  className="text-sm"
+                                >
+                                  <p className="font-medium capitalize text-gray-700">
+                                    {change.field
+                                      ?.replace(/([A-Z])/g, " $1")
+                                      .replace(/_/g, " ")}
+                                  </p>
+
+                                  <p className="mt-1 wrap-break-word text-gray-600">
+                                    <span>
+                                      {getActivityChangeLabel(change, "old")}
+                                    </span>
+                                    <span aria-hidden="true">→</span>
+                                    <span>
+                                      {getActivityChangeLabel(change, "new")}
+                                    </span>
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                      <p className="mt-3 text-xs text-gray-500">
+                        Performed by: {performer?.name || "Unknown user"}
+                        {performer?.email ? ` (${performer.email})` : ""}
+                      </p>
                     </article>
                   );
                 })}

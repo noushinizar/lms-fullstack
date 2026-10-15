@@ -1,8 +1,10 @@
+
 import mongoose from "mongoose";
 import Lead from "../models/Lead.js";
 import User from "../models/User.js";
 import Course from "../models/Course.js";
 import FollowUp from "../models/FollowUp.js";
+import LeadActivity from "../models/LeadActivity.js";
 
 const leadStatuses = [
   "new",
@@ -22,14 +24,128 @@ const leadSources = [
   "other",
 ];
 
+const followUpTypes = ["call", "whatsapp", "meeting", "email", "other"];
+
+const followUpOutcomes = [
+  "interested",
+  "no-answer",
+  "callback-requested",
+  "not-interested",
+  "enrolled",
+  "other",
+];
+
 const isAdmin = (req) => req.user.role === "admin";
 
-const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
+const isValidId = (id) =>
+  typeof id === "string" || id instanceof mongoose.Types.ObjectId
+    ? mongoose.Types.ObjectId.isValid(id)
+    : false;
 
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// ============================================================
+// AUDIT LABEL HELPERS
+// ============================================================
+
+const getCourseLabel = async (courseId, session = null) => {
+  if (!courseId || !isValidId(courseId)) {
+    return null;
+  }
+
+  let query = Course.findById(courseId).select("title name");
+
+  if (session) query = query.session(session);
+
+  const course = await query;
+
+  return course ? course.title || course.name || "Unnamed course" : null;
+};
+
+const getCounselorLabel = async (counselorId, session = null) => {
+  if (!counselorId || !isValidId(counselorId)) {
+    return null;
+  }
+
+  let query = User.findById(counselorId).select("name email");
+
+  if (session) query = query.session(session);
+
+  const counselor = await query;
+
+  return counselor
+    ? counselor.name || counselor.email || "Unnamed counselor"
+    : null;
+};
+
+const getFieldLabel = async (field, value, session = null) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (field === "interestedCourse") {
+    return getCourseLabel(value, session);
+  }
+
+  if (field === "assignedCounselor") {
+    return getCounselorLabel(value, session);
+  }
+
+  if (field === "followUpDate") {
+    return new Date(value).toLocaleString();
+  }
+
+  return String(value);
+};
+
+const createAuditChange = async (
+  field,
+  oldValue,
+  newValue,
+  session = null,
+) => {
+  const oldLabel = await getFieldLabel(field, oldValue, session);
+  const newLabel = await getFieldLabel(field, newValue, session);
+
+  return {
+    field,
+    oldValue: oldValue ?? null,
+    newValue: newValue ?? null,
+    oldLabel,
+    newLabel,
+  };
+};
+
+const logLeadActivity = async ({
+  leadId,
+  userId,
+  action,
+  description,
+  changes = [],
+  session = null,
+}) => {
+  const activity = {
+    lead: leadId,
+    performedBy: userId,
+    action,
+    description,
+    changes,
+  };
+
+  if (session) {
+    const [created] = await LeadActivity.create([activity], { session });
+    return created;
+  }
+
+  return LeadActivity.create(activity);
+};
+
+// ============================================================
+// VALIDATION HELPERS
+// ============================================================
 
 const validateCourse = async (courseId) => {
-  // Selecting a course is optional when creating a lead.
   if (courseId === undefined || courseId === null || courseId === "") {
     return { valid: true, value: null };
   }
@@ -40,12 +156,17 @@ const validateCourse = async (courseId) => {
 
   const course = await Course.findById(courseId).select("_id");
 
-  return course ? { valid: true, value: course._id } : { valid: false };
+  return course
+    ? { valid: true, value: course._id }
+    : { valid: false };
 };
 
 const validateCounselor = async (counselorId) => {
-  // Assigning a counselor is optional when creating a lead.
-  if (counselorId === undefined || counselorId === null || counselorId === "") {
+  if (
+    counselorId === undefined ||
+    counselorId === null ||
+    counselorId === ""
+  ) {
     return { valid: true, value: null };
   }
 
@@ -58,10 +179,15 @@ const validateCounselor = async (counselorId) => {
     role: "admission_counselor",
   }).select("_id");
 
-  return counselor ? { valid: true, value: counselor._id } : { valid: false };
+  return counselor
+    ? { valid: true, value: counselor._id }
+    : { valid: false };
 };
 
-// Create a lead
+// ============================================================
+// CREATE LEAD
+// ============================================================
+
 export const createLead = async (req, res) => {
   try {
     const {
@@ -100,7 +226,8 @@ export const createLead = async (req, res) => {
 
     if (
       normalizedEmail.length > 254 ||
-      (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
+      (normalizedEmail &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
     ) {
       return res.status(400).json({ message: "Invalid email address." });
     }
@@ -117,9 +244,9 @@ export const createLead = async (req, res) => {
       notes !== undefined &&
       (typeof notes !== "string" || notes.length > 5000)
     ) {
-      return res
-        .status(400)
-        .json({ message: "Notes cannot exceed 5000 characters." });
+      return res.status(400).json({
+        message: "Notes cannot exceed 5000 characters.",
+      });
     }
 
     if (followUpDate && Number.isNaN(Date.parse(followUpDate))) {
@@ -147,7 +274,6 @@ export const createLead = async (req, res) => {
 
       counselorId = counselorResult.value;
     } else {
-      // Counselors can create leads only for themselves.
       counselorId = req.user._id;
     }
 
@@ -164,6 +290,36 @@ export const createLead = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    const initialChanges = [];
+
+    initialChanges.push(
+      await createAuditChange("status", null, lead.status),
+    );
+
+    initialChanges.push(
+      await createAuditChange(
+        "interestedCourse",
+        null,
+        lead.interestedCourse ? String(lead.interestedCourse) : null,
+      ),
+    );
+
+    initialChanges.push(
+      await createAuditChange(
+        "assignedCounselor",
+        null,
+        lead.assignedCounselor ? String(lead.assignedCounselor) : null,
+      ),
+    );
+
+    await logLeadActivity({
+      leadId: lead._id,
+      userId: req.user._id,
+      action: "lead_created",
+      description: `Lead "${lead.name}" was created.`,
+      changes: initialChanges,
+    });
+
     return res.status(201).json({
       message: "Lead created successfully.",
       lead,
@@ -177,14 +333,15 @@ export const createLead = async (req, res) => {
   }
 };
 
-// Get and filter leads
+// ============================================================
+// GET AND FILTER LEADS
+// ============================================================
+
 export const getLeads = async (req, res) => {
   try {
     const { search, status, source, assignedCounselor } = req.query;
-
     const filter = {};
 
-    // Counselors can only view their own assigned leads.
     if (isAdmin(req)) {
       if (assignedCounselor) {
         if (!isValidId(assignedCounselor)) {
@@ -244,7 +401,10 @@ export const getLeads = async (req, res) => {
   }
 };
 
-// Get one lead
+// ============================================================
+// GET ONE LEAD
+// ============================================================
+
 export const getLeadById = async (req, res) => {
   try {
     if (!isValidId(req.params.id)) {
@@ -280,7 +440,10 @@ export const getLeadById = async (req, res) => {
   }
 };
 
-// Update a lead
+// ============================================================
+// UPDATE LEAD
+// ============================================================
+
 export const updateLead = async (req, res) => {
   try {
     if (!isValidId(req.params.id)) {
@@ -301,6 +464,24 @@ export const updateLead = async (req, res) => {
         message: "You cannot update this lead.",
       });
     }
+
+    const previousValues = {
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+      interestedCourse: lead.interestedCourse
+        ? String(lead.interestedCourse)
+        : null,
+      source: lead.source,
+      status: lead.status,
+      assignedCounselor: lead.assignedCounselor
+        ? String(lead.assignedCounselor)
+        : null,
+      followUpDate: lead.followUpDate
+        ? new Date(lead.followUpDate).toISOString()
+        : null,
+      notes: lead.notes,
+    };
 
     const {
       name,
@@ -335,7 +516,8 @@ export const updateLead = async (req, res) => {
 
       if (
         normalizedEmail.length > 254 ||
-        (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
+        (normalizedEmail &&
+          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
       ) {
         return res.status(400).json({ message: "Invalid email address." });
       }
@@ -405,7 +587,6 @@ export const updateLead = async (req, res) => {
       lead.notes = notes.trim();
     }
 
-    // Only admins can assign or reassign leads.
     if (isAdmin(req) && assignedCounselor !== undefined) {
       const result = await validateCounselor(assignedCounselor);
 
@@ -420,6 +601,76 @@ export const updateLead = async (req, res) => {
 
     await lead.save();
 
+    const fieldsToTrack = [
+      "name",
+      "email",
+      "phone",
+      "interestedCourse",
+      "source",
+      "status",
+      "assignedCounselor",
+      "followUpDate",
+      "notes",
+    ];
+
+    const changes = [];
+
+    for (const field of fieldsToTrack) {
+      let newValue = lead[field];
+
+      if (field === "interestedCourse" || field === "assignedCounselor") {
+        newValue = newValue ? String(newValue) : null;
+      }
+
+      if (field === "followUpDate") {
+        newValue = newValue ? new Date(newValue).toISOString() : null;
+      }
+
+      const oldValue = previousValues[field];
+
+      if (oldValue === newValue) continue;
+
+      changes.push(
+        await createAuditChange(
+          field,
+          oldValue ?? null,
+          newValue ?? null,
+        ),
+      );
+    }
+
+    if (changes.length > 0) {
+      const statusChanged = changes.some(
+        (change) => change.field === "status",
+      );
+
+      const counselorChanged = changes.some(
+        (change) => change.field === "assignedCounselor",
+      );
+
+      const action = statusChanged
+        ? "status_changed"
+        : counselorChanged
+          ? "counselor_reassigned"
+          : "lead_updated";
+
+      const description = statusChanged
+        ? `Lead status changed from "${previousValues.status}" to "${lead.status}".`
+        : counselorChanged
+          ? "Lead counselor assignment changed."
+          : `Lead details updated: ${changes
+              .map((change) => change.field)
+              .join(", ")}.`;
+
+      await logLeadActivity({
+        leadId: lead._id,
+        userId: req.user._id,
+        action,
+        description,
+        changes,
+      });
+    }
+
     return res.status(200).json({
       message: "Lead updated successfully.",
       lead,
@@ -433,7 +684,10 @@ export const updateLead = async (req, res) => {
   }
 };
 
-// Delete a lead (admin only; enforced in routes too)
+// ============================================================
+// DELETE LEAD
+// ============================================================
+
 export const deleteLead = async (req, res) => {
   try {
     if (!isValidId(req.params.id)) {
@@ -460,25 +714,10 @@ export const deleteLead = async (req, res) => {
   }
 };
 
+// ============================================================
+// ACCESS CONTROL HELPER
+// ============================================================
 
-const followUpTypes = [
-  "call",
-  "whatsapp",
-  "meeting",
-  "email",
-  "other",
-];
-
-const followUpOutcomes = [
-  "interested",
-  "no-answer",
-  "callback-requested",
-  "not-interested",
-  "enrolled",
-  "other",
-];
-
-// Check whether the current user can access this lead.
 const getAccessibleLead = async (leadId, user) => {
   if (!isValidId(leadId)) {
     return { error: "invalid-id" };
@@ -500,24 +739,165 @@ const getAccessibleLead = async (leadId, user) => {
   return { lead };
 };
 
-// Get a lead's follow-up history.
-export const getFollowUps = async (req, res) => {
+// ============================================================
+// RESOLVE OLD ACTIVITY LABELS
+// ============================================================
+
+const resolveActivityLabels = async (activities) => {
+  const courseIds = new Set();
+  const counselorIds = new Set();
+
+  for (const activity of activities) {
+    for (const change of activity.changes || []) {
+      if (
+        change.field === "interestedCourse" ||
+        change.field === "assignedCounselor"
+      ) {
+        for (const value of [change.oldValue, change.newValue]) {
+          if (!value || !isValidId(value)) continue;
+
+          if (change.field === "interestedCourse") {
+            courseIds.add(String(value));
+          } else {
+            counselorIds.add(String(value));
+          }
+        }
+      }
+    }
+  }
+
+  const [courses, counselors] = await Promise.all([
+    courseIds.size
+      ? Course.find({ _id: { $in: [...courseIds] } }).select("_id title name")
+      : [],
+    counselorIds.size
+      ? User.find({ _id: { $in: [...counselorIds] } }).select("_id name email")
+      : [],
+  ]);
+
+  const courseNames = new Map(
+    courses.map((course) => [
+      String(course._id),
+      course.title || course.name || "Unnamed course",
+    ]),
+  );
+
+  const counselorNames = new Map(
+    counselors.map((counselor) => [
+      String(counselor._id),
+      counselor.name || counselor.email || "Unnamed counselor",
+    ]),
+  );
+
+  return activities.map((activity) => {
+    const item = activity.toObject();
+
+    item.changes = (item.changes || []).map((change) => {
+      const updated = { ...change };
+
+      if (updated.field === "interestedCourse") {
+        updated.oldLabel =
+          updated.oldLabel ??
+          courseNames.get(String(updated.oldValue)) ??
+          (updated.oldValue ? "Course no longer available" : null);
+
+        updated.newLabel =
+          updated.newLabel ??
+          courseNames.get(String(updated.newValue)) ??
+          (updated.newValue ? "Course no longer available" : null);
+      }
+
+      if (updated.field === "assignedCounselor") {
+        updated.oldLabel =
+          updated.oldLabel ??
+          counselorNames.get(String(updated.oldValue)) ??
+          (updated.oldValue ? "Counselor no longer available" : null);
+
+        updated.newLabel =
+          updated.newLabel ??
+          counselorNames.get(String(updated.newValue)) ??
+          (updated.newValue ? "Counselor no longer available" : null);
+      }
+
+      return updated;
+    });
+
+    return item;
+  });
+};
+
+// ============================================================
+// GET LEAD ACTIVITIES
+// ============================================================
+
+export const getLeadActivities = async (req, res) => {
   try {
-    const result = await getAccessibleLead(
-      req.params.leadId,
-      req.user
-    );
+    const result = await getAccessibleLead(req.params.leadId, req.user);
 
     if (result.error === "invalid-id") {
       return res.status(400).json({
+        success: false,
         message: "Invalid lead ID.",
       });
     }
 
     if (result.error === "not-found") {
       return res.status(404).json({
+        success: false,
         message: "Lead not found.",
       });
+    }
+
+    if (result.error === "forbidden") {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view this lead's activity.",
+      });
+    }
+
+    const activities = await LeadActivity.find({
+      lead: result.lead._id,
+    })
+      .populate("performedBy", "name email")
+      .sort({ createdAt: -1 })
+      .lean({ virtuals: false });
+
+    const resolvedActivities = await resolveActivityLabels(
+      activities.map((activity) => ({
+        ...activity,
+        toObject: () => activity,
+      })),
+    );
+
+    return res.status(200).json({
+      success: true,
+      count: resolvedActivities.length,
+      activities: resolvedActivities,
+    });
+  } catch (error) {
+    console.error("Get Lead Activities Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch lead activity history.",
+    });
+  }
+};
+
+// ============================================================
+// GET FOLLOW-UP HISTORY
+// ============================================================
+
+export const getFollowUps = async (req, res) => {
+  try {
+    const result = await getAccessibleLead(req.params.leadId, req.user);
+
+    if (result.error === "invalid-id") {
+      return res.status(400).json({ message: "Invalid lead ID." });
+    }
+
+    if (result.error === "not-found") {
+      return res.status(404).json({ message: "Lead not found." });
     }
 
     if (result.error === "forbidden") {
@@ -545,25 +925,20 @@ export const getFollowUps = async (req, res) => {
   }
 };
 
-// Record a new follow-up activity.
+// ============================================================
+// CREATE FOLLOW-UP AND AUDIT ENTRY ATOMICALLY
+// ============================================================
 
 export const createFollowUp = async (req, res) => {
   try {
-    const result = await getAccessibleLead(
-      req.params.leadId,
-      req.user
-    );
+    const result = await getAccessibleLead(req.params.leadId, req.user);
 
     if (result.error === "invalid-id") {
-      return res.status(400).json({
-        message: "Invalid lead ID.",
-      });
+      return res.status(400).json({ message: "Invalid lead ID." });
     }
 
     if (result.error === "not-found") {
-      return res.status(404).json({
-        message: "Lead not found.",
-      });
+      return res.status(404).json({ message: "Lead not found." });
     }
 
     if (result.error === "forbidden") {
@@ -572,26 +947,14 @@ export const createFollowUp = async (req, res) => {
       });
     }
 
-    const {
-      type,
-      outcome,
-      notes,
-      nextFollowUpDate,
-    } = req.body;
+    const { type, outcome, notes, nextFollowUpDate } = req.body;
 
     if (!followUpTypes.includes(type)) {
-      return res.status(400).json({
-        message: "Invalid follow-up type.",
-      });
+      return res.status(400).json({ message: "Invalid follow-up type." });
     }
 
-    if (
-      outcome !== undefined &&
-      !followUpOutcomes.includes(outcome)
-    ) {
-      return res.status(400).json({
-        message: "Invalid follow-up outcome.",
-      });
+    if (outcome !== undefined && !followUpOutcomes.includes(outcome)) {
+      return res.status(400).json({ message: "Invalid follow-up outcome." });
     }
 
     if (
@@ -607,26 +970,20 @@ export const createFollowUp = async (req, res) => {
       nextFollowUpDate !== undefined &&
       nextFollowUpDate !== null &&
       nextFollowUpDate !== "" &&
-      (
-        typeof nextFollowUpDate !== "string" ||
-        Number.isNaN(Date.parse(nextFollowUpDate))
-      )
+      (typeof nextFollowUpDate !== "string" ||
+        Number.isNaN(Date.parse(nextFollowUpDate)))
     ) {
       return res.status(400).json({
         message: "Invalid next follow-up date.",
       });
     }
 
-    // Save the follow-up and lead date as one transaction.
     const session = await mongoose.startSession();
     let followUpId;
 
     try {
       await session.withTransaction(async () => {
-        // Fetch the latest lead inside the transaction.
-        const lead = await Lead.findById(
-          result.lead._id
-        ).session(session);
+        const lead = await Lead.findById(result.lead._id).session(session);
 
         if (!lead) {
           const error = new Error("Lead not found.");
@@ -634,15 +991,11 @@ export const createFollowUp = async (req, res) => {
           throw error;
         }
 
-        // Recheck counselor access before saving.
         if (
           !isAdmin(req) &&
-          String(lead.assignedCounselor) !==
-            String(req.user._id)
+          String(lead.assignedCounselor) !== String(req.user._id)
         ) {
-          const error = new Error(
-            "You cannot add follow-ups to this lead."
-          );
+          const error = new Error("You cannot add follow-ups to this lead.");
           error.statusCode = 403;
           throw error;
         }
@@ -654,29 +1007,73 @@ export const createFollowUp = async (req, res) => {
               type,
               outcome: outcome || "other",
               notes: notes?.trim() || "",
-              nextFollowUpDate:
-                nextFollowUpDate || null,
+              nextFollowUpDate: nextFollowUpDate || null,
               createdBy: req.user._id,
             },
           ],
-          { session }
+          { session },
         );
 
         followUpId = followUp._id;
 
-        // Synchronize the lead's scheduled follow-up date.
+        const changes = [
+          {
+            field: "followUpType",
+            oldValue: null,
+            newValue: type,
+            oldLabel: null,
+            newLabel: type,
+          },
+          {
+            field: "followUpOutcome",
+            oldValue: null,
+            newValue: outcome || "other",
+            oldLabel: null,
+            newLabel: outcome || "other",
+          },
+        ];
+
         if (nextFollowUpDate !== undefined) {
+          const oldDate = lead.followUpDate
+            ? new Date(lead.followUpDate).toISOString()
+            : null;
+
           lead.followUpDate = nextFollowUpDate || null;
           await lead.save({ session });
+
+          const newDate = lead.followUpDate
+            ? new Date(lead.followUpDate).toISOString()
+            : null;
+
+          if (oldDate !== newDate) {
+            changes.push(
+              await createAuditChange(
+                "followUpDate",
+                oldDate,
+                newDate,
+                session,
+              ),
+            );
+          }
         }
+
+        await logLeadActivity({
+          leadId: lead._id,
+          userId: req.user._id,
+          action: "follow_up_added",
+          description: `A ${type} follow-up was recorded (${outcome || "other"}).`,
+          changes,
+          session,
+        });
       });
     } finally {
       await session.endSession();
     }
 
-    // Return the saved record after the transaction commits.
-    const followUp = await FollowUp.findById(followUpId)
-      .populate("createdBy", "name email");
+    const followUp = await FollowUp.findById(followUpId).populate(
+      "createdBy",
+      "name email",
+    );
 
     return res.status(201).json({
       message: "Follow-up recorded successfully.",
@@ -696,4 +1093,3 @@ export const createFollowUp = async (req, res) => {
     });
   }
 };
-

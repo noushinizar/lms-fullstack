@@ -11,6 +11,7 @@ import {
   deleteLead,
   getFollowUps,
   createFollowUp,
+  getLeadActivities,
 } from "../controllers/leadController.js";
 
 const router = express.Router();
@@ -30,5 +31,7 @@ router.delete("/:id", authorizeRoles("admin"), deleteLead);
 router.get("/:leadId/follow-ups", getFollowUps);
 
 router.post("/:leadId/follow-ups", createFollowUp);
+
+router.get("/:leadId/activities", getLeadActivities);
 
 export default router;

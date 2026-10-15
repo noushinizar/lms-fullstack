@@ -42,7 +42,7 @@ function Dashboard() {
 
   <StatCards
     title="Students"
-    value={stats.totalStudents}
+    value={stats?.totalStudents ?? 0}
   />
 
   <StatCards
