@@ -3,6 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   Search,
   Plus,
+  Upload,
+  Download,
   RefreshCw,
   X,
   Eye,
@@ -183,7 +185,7 @@ function Leads() {
 
   // Initialize the filter from the dashboard URL, if provided.
   const [followUpFilter, setFollowUpFilter] = useState(() =>
-    getValidFollowUpFilter(searchParams.get("followUp"))
+    getValidFollowUpFilter(searchParams.get("followUp")),
   );
 
   const [loading, setLoading] = useState(true);
@@ -197,6 +199,13 @@ function Leads() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(initialForm);
 
+  // Spreadsheet import state
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [importError, setImportError] = useState("");
+
   // Read the logged-in role to control UI visibility.
   const [isAdmin] = useState(() => {
     try {
@@ -208,9 +217,7 @@ function Leads() {
 
   // Keep the selected filter synchronized with URL/browser navigation.
   useEffect(() => {
-    setFollowUpFilter(
-      getValidFollowUpFilter(searchParams.get("followUp"))
-    );
+    setFollowUpFilter(getValidFollowUpFilter(searchParams.get("followUp")));
   }, [searchParams]);
 
   // Update the URL whenever a follow-up card is selected.
@@ -244,17 +251,11 @@ function Leads() {
       const response = await api.get("/leads", { params });
       const data = response.data;
 
-      setLeads(
-        Array.isArray(data)
-          ? data
-          : data.leads || data.data || []
-      );
+      setLeads(Array.isArray(data) ? data : data.leads || data.data || []);
     } catch (err) {
       console.error("Failed to fetch leads:", err);
 
-      setError(
-        err.response?.data?.message || "Unable to load leads."
-      );
+      setError(err.response?.data?.message || "Unable to load leads.");
     } finally {
       setLoading(false);
     }
@@ -271,9 +272,7 @@ function Leads() {
         const data = response.data;
 
         setCourses(
-          Array.isArray(data)
-            ? data
-            : data.courses || data.data || []
+          Array.isArray(data) ? data : data.courses || data.data || [],
         );
       } catch (err) {
         console.error("Unable to load courses:", err);
@@ -348,12 +347,76 @@ function Leads() {
     } catch (err) {
       console.error("Failed to create lead:", err);
 
-      setError(
-        err.response?.data?.message || "Unable to create lead."
-      );
+      setError(err.response?.data?.message || "Unable to create lead.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleImportSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!importFile) {
+      setImportError("Please select a CSV or Excel file.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", importFile);
+
+    try {
+      setImporting(true);
+      setImportError("");
+      setImportResult(null);
+      setError("");
+      setSuccess("");
+
+      const response = await api.post("/leads/import", formData);
+
+      setImportResult(response.data.results);
+      setImportFile(null);
+
+      await fetchLeads();
+    } catch (err) {
+      console.error("Failed to import leads:", err);
+
+      setImportError(
+        err.response?.data?.message ||
+          "Unable to import leads. Please try again.",
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "name",
+      "phone",
+      "email",
+      "interestedCourse",
+      "source",
+      "status",
+      "followUpDate",
+      "notes",
+    ];
+
+    const csvContent = `\uFEFF${headers.join(",")}\r\n`;
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "astrobyte-leads-template.csv";
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    URL.revokeObjectURL(url);
   };
 
   const handleDeleteLead = async () => {
@@ -369,9 +432,7 @@ function Leads() {
 
       await api.delete(`/leads/${lead._id}`);
 
-      setLeads((previous) =>
-        previous.filter((item) => item._id !== lead._id)
-      );
+      setLeads((previous) => previous.filter((item) => item._id !== lead._id));
 
       setSuccess(`Lead "${lead.name}" deleted successfully.`);
 
@@ -381,7 +442,7 @@ function Leads() {
 
       setError(
         err.response?.data?.message ||
-          "Unable to delete lead. Please try again."
+          "Unable to delete lead. Please try again.",
       );
     } finally {
       setDeletingId(null);
@@ -401,27 +462,41 @@ function Leads() {
       {/* Page heading */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Leads
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900">Leads</h1>
 
           <p className="mt-2 text-gray-600">
             Manage enquiries and track admission opportunities.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setError("");
-            setSuccess("");
-            setShowForm(true);
-          }}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 py-3 font-semibold text-white transition hover:bg-amber-600"
-        >
-          <Plus size={20} />
-          Add Lead
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setImportError("");
+              setImportResult(null);
+              setImportFile(null);
+              setShowImport(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500 px-5 py-3 font-semibold text-amber-700 transition hover:bg-amber-50"
+          >
+            <Upload size={20} />
+            Import Leads
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setSuccess("");
+              setShowForm(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 py-3 font-semibold text-white transition hover:bg-amber-600"
+          >
+            <Plus size={20} />
+            Add Lead
+          </button>
+        </div>
       </div>
 
       {/* Feedback */}
@@ -430,10 +505,7 @@ function Leads() {
           role="alert"
           className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700"
         >
-          <AlertCircle
-            size={20}
-            className="mt-0.5 shrink-0"
-          />
+          <AlertCircle size={20} className="mt-0.5 shrink-0" />
 
           <p className="flex-1">{error}</p>
 
@@ -592,11 +664,7 @@ function Leads() {
               disabled={loading}
               className="inline-flex items-center gap-2 text-sm font-semibold text-amber-600 hover:text-amber-700 disabled:opacity-50"
             >
-              <RefreshCw
-                size={16}
-                className={loading ? "animate-spin" : ""}
-              />
-
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
           </div>
@@ -606,9 +674,7 @@ function Leads() {
       {/* Lead table */}
       <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
         {loading ? (
-          <div className="p-12 text-center text-gray-500">
-            Loading leads...
-          </div>
+          <div className="p-12 text-center text-gray-500">Loading leads...</div>
         ) : filteredLeads.length === 0 ? (
           <div className="flex flex-col items-center px-6 py-14 text-center">
             <div className="rounded-full bg-amber-50 p-4">
@@ -620,8 +686,7 @@ function Leads() {
             </h2>
 
             <p className="mt-2 max-w-md text-sm text-gray-500">
-              Try changing your filters, or add a new enquiry to get
-              started.
+              Try changing your filters, or add a new enquiry to get started.
             </p>
 
             <button
@@ -659,10 +724,7 @@ function Leads() {
                   const followUp = followUpStyles[category];
 
                   return (
-                    <tr
-                      key={lead._id}
-                      className="transition hover:bg-gray-50"
-                    >
+                    <tr key={lead._id} className="transition hover:bg-gray-50">
                       <td className="px-5 py-4">
                         <p className="font-semibold text-gray-900">
                           {lead.name}
@@ -742,14 +804,10 @@ function Leads() {
                               className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {deletingId === lead._id ? (
-                                <RefreshCw
-                                  size={16}
-                                  className="animate-spin"
-                                />
+                                <RefreshCw size={16} className="animate-spin" />
                               ) : (
                                 <Trash2 size={16} />
                               )}
-
                               Delete
                             </button>
                           )}
@@ -1051,6 +1109,182 @@ function Leads() {
                 >
                   {saving ? "Saving..." : "Create Lead"}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Import leads modal */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-leads-title"
+            className="my-8 w-full max-w-xl rounded-2xl bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+              <div>
+                <h2
+                  id="import-leads-title"
+                  className="text-xl font-bold text-gray-900"
+                >
+                  Import Leads
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Upload a CSV or Excel spreadsheet.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!importing) setShowImport(false);
+                }}
+                disabled={importing}
+                aria-label="Close import modal"
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <form onSubmit={handleImportSubmit} className="space-y-5 p-6">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-semibold">Before uploading</p>
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-400 px-3 py-2 font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  <Download size={16} />
+                  Download CSV Template
+                </button>
+                <p className="mt-2">
+                  Your spreadsheet must include <strong>name</strong> and{" "}
+                  <strong>phone</strong> columns. Optional columns include
+                  email, interestedCourse, source, status, followUpDate, and
+                  notes.
+                </p>
+                <p className="mt-2">
+                  Supported formats: CSV and XLSX. Maximum file size: 2 MB.
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="lead-import-file"
+                  className="mb-2 block text-sm font-medium text-gray-700"
+                >
+                  Select spreadsheet *
+                </label>
+
+                <input
+                  id="lead-import-file"
+                  type="file"
+                  accept=".csv,.xlsx"
+                  required
+                  disabled={importing}
+                  onChange={(event) => {
+                    setImportFile(event.target.files?.[0] || null);
+                    setImportError("");
+                    setImportResult(null);
+                  }}
+                  className="block w-full rounded-lg border border-gray-200 p-3 text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-amber-100 file:px-3 file:py-2 file:font-semibold file:text-amber-800"
+                />
+
+                {importFile && (
+                  <p className="mt-2 text-sm text-gray-500">
+                    Selected: {importFile.name}
+                  </p>
+                )}
+              </div>
+
+              {importError && (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                >
+                  {importError}
+                </div>
+              )}
+
+              {importResult && (
+                <div
+                  role="status"
+                  className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4"
+                >
+                  <p className="font-semibold text-gray-900">
+                    Import completed
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="rounded-lg bg-green-50 p-3">
+                      <p className="text-2xl font-bold text-green-700">
+                        {importResult.imported}
+                      </p>
+                      <p className="text-xs text-gray-600">Imported</p>
+                    </div>
+
+                    <div className="rounded-lg bg-amber-50 p-3">
+                      <p className="text-2xl font-bold text-amber-700">
+                        {importResult.skipped}
+                      </p>
+                      <p className="text-xs text-gray-600">Skipped</p>
+                    </div>
+
+                    <div className="rounded-lg bg-red-50 p-3">
+                      <p className="text-2xl font-bold text-red-700">
+                        {importResult.failed}
+                      </p>
+                      <p className="text-xs text-gray-600">Failed</p>
+                    </div>
+                  </div>
+
+                  {importResult.errors?.length > 0 && (
+                    <details className="text-sm">
+                      <summary className="cursor-pointer font-medium text-gray-700">
+                        View row details ({importResult.errors.length})
+                      </summary>
+
+                      <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto">
+                        {importResult.errors.map((item, index) => (
+                          <li
+                            key={`${item.row}-${index}`}
+                            className="text-red-700"
+                          >
+                            Row {item.row}: {item.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap justify-end gap-3 border-t border-gray-100 pt-5">
+                <button
+                  type="button"
+                  onClick={() => setShowImport(false)}
+                  disabled={importing}
+                  className="rounded-lg border border-gray-200 px-5 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {importResult ? "Close" : "Cancel"}
+                </button>
+
+                {!importResult && (
+                  <button
+                    type="submit"
+                    disabled={importing || !importFile}
+                    className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-6 py-3 font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {importing && (
+                      <RefreshCw size={18} className="animate-spin" />
+                    )}
+                    {importing ? "Importing..." : "Upload and Import"}
+                  </button>
+                )}
               </div>
             </form>
           </div>

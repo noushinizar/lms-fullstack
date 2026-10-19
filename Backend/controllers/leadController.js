@@ -7,6 +7,10 @@ import LeadActivity from "../models/LeadActivity.js";
 import ExcelJS from "exceljs";
 import { Readable } from "node:stream";
 
+// ============================================================
+// CONSTANTS
+// ============================================================
+
 const leadStatuses = [
   "new",
   "contacted",
@@ -36,23 +40,67 @@ const followUpOutcomes = [
   "other",
 ];
 
-const isAdmin = (req) => req.user.role === "admin";
+const isAdmin = (req) => req.user?.role === "admin";
 
 const isValidId = (id) =>
-  typeof id === "string" || id instanceof mongoose.Types.ObjectId
-    ? mongoose.Types.ObjectId.isValid(id)
-    : false;
+  (typeof id === "string" || id instanceof mongoose.Types.ObjectId) &&
+  mongoose.Types.ObjectId.isValid(id);
 
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const normalizeEmail = (value) =>
+  String(value ?? "").trim().toLowerCase();
+
+const normalizePhone = (value) =>
+  String(value ?? "").replace(/\D/g, "");
+
+const validatePhone = (value) => {
+  if (typeof value !== "string") return false;
+
+  const phone = value.trim();
+
+  if (!phone || phone.length > 20) return false;
+
+  // Accept an optional leading +, spaces, parentheses, dots and hyphens.
+  if (!/^\+?[\d\s().-]+$/.test(phone)) return false;
+
+  const digits = normalizePhone(phone);
+
+  return digits.length >= 7 && digits.length <= 15;
+};
+
+const validateEmail = (value) =>
+  typeof value === "string" &&
+  value.length <= 254 &&
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const parseOptionalDate = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return { valid: true, value: null };
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return { valid: false, value: null };
+  }
+
+  return { valid: true, value: parsed };
+};
+
+const normalizeHeader = (value) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
 
 // ============================================================
 // AUDIT LABEL HELPERS
 // ============================================================
 
 const getCourseLabel = async (courseId, session = null) => {
-  if (!courseId || !isValidId(courseId)) {
-    return null;
-  }
+  if (!courseId || !isValidId(courseId)) return null;
 
   let query = Course.findById(courseId).select("title name");
 
@@ -64,9 +112,7 @@ const getCourseLabel = async (courseId, session = null) => {
 };
 
 const getCounselorLabel = async (counselorId, session = null) => {
-  if (!counselorId || !isValidId(counselorId)) {
-    return null;
-  }
+  if (!counselorId || !isValidId(counselorId)) return null;
 
   let query = User.findById(counselorId).select("name email");
 
@@ -80,9 +126,7 @@ const getCounselorLabel = async (counselorId, session = null) => {
 };
 
 const getFieldLabel = async (field, value, session = null) => {
-  if (value === null || value === undefined || value === "") {
-    return null;
-  }
+  if (value === null || value === undefined || value === "") return null;
 
   if (field === "interestedCourse") {
     return getCourseLabel(value, session);
@@ -93,13 +137,20 @@ const getFieldLabel = async (field, value, session = null) => {
   }
 
   if (field === "followUpDate") {
-    return new Date(value).toLocaleString();
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
   }
 
   return String(value);
 };
 
-const createAuditChange = async (field, oldValue, newValue, session = null) => {
+const createAuditChange = async (
+  field,
+  oldValue,
+  newValue,
+  session = null,
+) => {
   const oldLabel = await getFieldLabel(field, oldValue, session);
   const newLabel = await getFieldLabel(field, newValue, session);
 
@@ -145,9 +196,7 @@ const validateCourse = async (courseId) => {
     return { valid: true, value: null };
   }
 
-  if (!isValidId(courseId)) {
-    return { valid: false };
-  }
+  if (!isValidId(courseId)) return { valid: false };
 
   const course = await Course.findById(courseId).select("_id");
 
@@ -155,13 +204,15 @@ const validateCourse = async (courseId) => {
 };
 
 const validateCounselor = async (counselorId) => {
-  if (counselorId === undefined || counselorId === null || counselorId === "") {
+  if (
+    counselorId === undefined ||
+    counselorId === null ||
+    counselorId === ""
+  ) {
     return { valid: true, value: null };
   }
 
-  if (!isValidId(counselorId)) {
-    return { valid: false };
-  }
+  if (!isValidId(counselorId)) return { valid: false };
 
   const counselor = await User.findOne({
     _id: counselorId,
@@ -195,13 +246,9 @@ export const createLead = async (req, res) => {
       });
     }
 
-    if (
-      typeof phone !== "string" ||
-      !phone.trim() ||
-      phone.trim().length > 20
-    ) {
+    if (!validatePhone(phone)) {
       return res.status(400).json({
-        message: "A valid phone number is required.",
+        message: "Enter a valid phone number containing 7 to 15 digits.",
       });
     }
 
@@ -209,12 +256,9 @@ export const createLead = async (req, res) => {
       return res.status(400).json({ message: "Invalid email address." });
     }
 
-    const normalizedEmail = (email || "").trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
 
-    if (
-      normalizedEmail.length > 254 ||
-      (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
-    ) {
+    if (normalizedEmail && !validateEmail(normalizedEmail)) {
       return res.status(400).json({ message: "Invalid email address." });
     }
 
@@ -235,7 +279,9 @@ export const createLead = async (req, res) => {
       });
     }
 
-    if (followUpDate && Number.isNaN(Date.parse(followUpDate))) {
+    const dateResult = parseOptionalDate(followUpDate);
+
+    if (!dateResult.valid) {
       return res.status(400).json({ message: "Invalid follow-up date." });
     }
 
@@ -260,6 +306,7 @@ export const createLead = async (req, res) => {
 
       counselorId = counselorResult.value;
     } else {
+      // A counselor creating a lead can only assign it to themselves.
       counselorId = req.user._id;
     }
 
@@ -271,30 +318,24 @@ export const createLead = async (req, res) => {
       source: source || "other",
       status: status || "new",
       assignedCounselor: counselorId,
-      followUpDate: followUpDate || null,
+      followUpDate: dateResult.value,
       notes: notes?.trim() || "",
       createdBy: req.user._id,
     });
 
-    const initialChanges = [];
-
-    initialChanges.push(await createAuditChange("status", null, lead.status));
-
-    initialChanges.push(
+    const initialChanges = [
+      await createAuditChange("status", null, lead.status),
       await createAuditChange(
         "interestedCourse",
         null,
         lead.interestedCourse ? String(lead.interestedCourse) : null,
       ),
-    );
-
-    initialChanges.push(
       await createAuditChange(
         "assignedCounselor",
         null,
         lead.assignedCounselor ? String(lead.assignedCounselor) : null,
       ),
-    );
+    ];
 
     await logLeadActivity({
       leadId: lead._id,
@@ -311,9 +352,7 @@ export const createLead = async (req, res) => {
   } catch (error) {
     console.error("Create lead error:", error);
 
-    return res.status(500).json({
-      message: "Unable to create lead.",
-    });
+    return res.status(500).json({ message: "Unable to create lead." });
   }
 };
 
@@ -329,9 +368,7 @@ export const getLeads = async (req, res) => {
     if (isAdmin(req)) {
       if (assignedCounselor) {
         if (!isValidId(assignedCounselor)) {
-          return res.status(400).json({
-            message: "Invalid counselor ID.",
-          });
+          return res.status(400).json({ message: "Invalid counselor ID." });
         }
 
         filter.assignedCounselor = assignedCounselor;
@@ -379,9 +416,7 @@ export const getLeads = async (req, res) => {
   } catch (error) {
     console.error("Get leads error:", error);
 
-    return res.status(500).json({
-      message: "Unable to retrieve leads.",
-    });
+    return res.status(500).json({ message: "Unable to retrieve leads." });
   }
 };
 
@@ -418,9 +453,7 @@ export const getLeadById = async (req, res) => {
   } catch (error) {
     console.error("Get lead error:", error);
 
-    return res.status(500).json({
-      message: "Unable to retrieve lead.",
-    });
+    return res.status(500).json({ message: "Unable to retrieve lead." });
   }
 };
 
@@ -444,9 +477,7 @@ export const updateLead = async (req, res) => {
       !isAdmin(req) &&
       String(lead.assignedCounselor) !== String(req.user._id)
     ) {
-      return res.status(403).json({
-        message: "You cannot update this lead.",
-      });
+      return res.status(403).json({ message: "You cannot update this lead." });
     }
 
     const previousValues = {
@@ -480,11 +511,7 @@ export const updateLead = async (req, res) => {
     } = req.body;
 
     if (name !== undefined) {
-      if (
-        typeof name !== "string" ||
-        !name.trim() ||
-        name.trim().length > 100
-      ) {
+      if (typeof name !== "string" || !name.trim() || name.trim().length > 100) {
         return res.status(400).json({ message: "Invalid lead name." });
       }
 
@@ -496,12 +523,9 @@ export const updateLead = async (req, res) => {
         return res.status(400).json({ message: "Invalid email address." });
       }
 
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
 
-      if (
-        normalizedEmail.length > 254 ||
-        (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail))
-      ) {
+      if (normalizedEmail && !validateEmail(normalizedEmail)) {
         return res.status(400).json({ message: "Invalid email address." });
       }
 
@@ -509,12 +533,10 @@ export const updateLead = async (req, res) => {
     }
 
     if (phone !== undefined) {
-      if (
-        typeof phone !== "string" ||
-        !phone.trim() ||
-        phone.trim().length > 20
-      ) {
-        return res.status(400).json({ message: "Invalid phone number." });
+      if (!validatePhone(phone)) {
+        return res.status(400).json({
+          message: "Enter a valid phone number containing 7 to 15 digits.",
+        });
       }
 
       lead.phone = phone.trim();
@@ -549,15 +571,13 @@ export const updateLead = async (req, res) => {
     }
 
     if (followUpDate !== undefined) {
-      if (
-        followUpDate !== null &&
-        followUpDate !== "" &&
-        Number.isNaN(Date.parse(followUpDate))
-      ) {
+      const result = parseOptionalDate(followUpDate);
+
+      if (!result.valid) {
         return res.status(400).json({ message: "Invalid follow-up date." });
       }
 
-      lead.followUpDate = followUpDate || null;
+      lead.followUpDate = result.value;
     }
 
     if (notes !== undefined) {
@@ -609,20 +629,21 @@ export const updateLead = async (req, res) => {
         newValue = newValue ? new Date(newValue).toISOString() : null;
       }
 
-      const oldValue = previousValues[field];
-
-      if (oldValue === newValue) continue;
+      if (previousValues[field] === newValue) continue;
 
       changes.push(
-        await createAuditChange(field, oldValue ?? null, newValue ?? null),
+        await createAuditChange(
+          field,
+          previousValues[field] ?? null,
+          newValue ?? null,
+        ),
       );
     }
 
     if (changes.length > 0) {
-      const statusChanged = changes.some((change) => change.field === "status");
-
+      const statusChanged = changes.some((item) => item.field === "status");
       const counselorChanged = changes.some(
-        (change) => change.field === "assignedCounselor",
+        (item) => item.field === "assignedCounselor",
       );
 
       const action = statusChanged
@@ -636,7 +657,7 @@ export const updateLead = async (req, res) => {
         : counselorChanged
           ? "Lead counselor assignment changed."
           : `Lead details updated: ${changes
-              .map((change) => change.field)
+              .map((item) => item.field)
               .join(", ")}.`;
 
       await logLeadActivity({
@@ -655,18 +676,22 @@ export const updateLead = async (req, res) => {
   } catch (error) {
     console.error("Update lead error:", error);
 
-    return res.status(500).json({
-      message: "Unable to update lead.",
-    });
+    return res.status(500).json({ message: "Unable to update lead." });
   }
 };
 
 // ============================================================
-// DELETE LEAD
+// DELETE LEAD — ADMIN ONLY
 // ============================================================
 
 export const deleteLead = async (req, res) => {
   try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({
+        message: "Only administrators can delete leads.",
+      });
+    }
+
     if (!isValidId(req.params.id)) {
       return res.status(400).json({ message: "Invalid lead ID." });
     }
@@ -685,9 +710,7 @@ export const deleteLead = async (req, res) => {
   } catch (error) {
     console.error("Delete lead error:", error);
 
-    return res.status(500).json({
-      message: "Unable to delete lead.",
-    });
+    return res.status(500).json({ message: "Unable to delete lead." });
   }
 };
 
@@ -696,18 +719,14 @@ export const deleteLead = async (req, res) => {
 // ============================================================
 
 const getAccessibleLead = async (leadId, user) => {
-  if (!isValidId(leadId)) {
-    return { error: "invalid-id" };
-  }
+  if (!isValidId(leadId)) return { error: "invalid-id" };
 
   const lead = await Lead.findById(leadId);
 
-  if (!lead) {
-    return { error: "not-found" };
-  }
+  if (!lead) return { error: "not-found" };
 
   if (
-    !isAdmin({ user }) &&
+    user.role !== "admin" &&
     String(lead.assignedCounselor) !== String(user._id)
   ) {
     return { error: "forbidden" };
@@ -727,17 +746,19 @@ const resolveActivityLabels = async (activities) => {
   for (const activity of activities) {
     for (const change of activity.changes || []) {
       if (
-        change.field === "interestedCourse" ||
-        change.field === "assignedCounselor"
+        change.field !== "interestedCourse" &&
+        change.field !== "assignedCounselor"
       ) {
-        for (const value of [change.oldValue, change.newValue]) {
-          if (!value || !isValidId(value)) continue;
+        continue;
+      }
 
-          if (change.field === "interestedCourse") {
-            courseIds.add(String(value));
-          } else {
-            counselorIds.add(String(value));
-          }
+      for (const value of [change.oldValue, change.newValue]) {
+        if (!value || !isValidId(value)) continue;
+
+        if (change.field === "interestedCourse") {
+          courseIds.add(String(value));
+        } else {
+          counselorIds.add(String(value));
         }
       }
     }
@@ -767,7 +788,9 @@ const resolveActivityLabels = async (activities) => {
   );
 
   return activities.map((activity) => {
-    const item = activity.toObject();
+    const item = typeof activity.toObject === "function"
+      ? activity.toObject()
+      : { ...activity };
 
     item.changes = (item.changes || []).map((change) => {
       const updated = { ...change };
@@ -837,14 +860,9 @@ export const getLeadActivities = async (req, res) => {
     })
       .populate("performedBy", "name email")
       .sort({ createdAt: -1 })
-      .lean({ virtuals: false });
+      .lean();
 
-    const resolvedActivities = await resolveActivityLabels(
-      activities.map((activity) => ({
-        ...activity,
-        toObject: () => activity,
-      })),
-    );
+    const resolvedActivities = await resolveActivityLabels(activities);
 
     return res.status(200).json({
       success: true,
@@ -943,13 +961,9 @@ export const createFollowUp = async (req, res) => {
       });
     }
 
-    if (
-      nextFollowUpDate !== undefined &&
-      nextFollowUpDate !== null &&
-      nextFollowUpDate !== "" &&
-      (typeof nextFollowUpDate !== "string" ||
-        Number.isNaN(Date.parse(nextFollowUpDate)))
-    ) {
+    const dateResult = parseOptionalDate(nextFollowUpDate);
+
+    if (!dateResult.valid) {
       return res.status(400).json({
         message: "Invalid next follow-up date.",
       });
@@ -984,7 +998,7 @@ export const createFollowUp = async (req, res) => {
               type,
               outcome: outcome || "other",
               notes: notes?.trim() || "",
-              nextFollowUpDate: nextFollowUpDate || null,
+              nextFollowUpDate: dateResult.value,
               createdBy: req.user._id,
             },
           ],
@@ -1015,7 +1029,7 @@ export const createFollowUp = async (req, res) => {
             ? new Date(lead.followUpDate).toISOString()
             : null;
 
-          lead.followUpDate = nextFollowUpDate || null;
+          lead.followUpDate = dateResult.value;
           await lead.save({ session });
 
           const newDate = lead.followUpDate
@@ -1071,6 +1085,10 @@ export const createFollowUp = async (req, res) => {
   }
 };
 
+// ============================================================
+// IMPORT LEADS FROM CSV / XLSX
+// ============================================================
+
 export const importLeads = async (req, res) => {
   try {
     if (!req.file) {
@@ -1079,7 +1097,7 @@ export const importLeads = async (req, res) => {
       });
     }
 
-    const fileName = req.file.originalname.toLowerCase();
+    const fileName = String(req.file.originalname || "").toLowerCase();
 
     if (!fileName.endsWith(".csv") && !fileName.endsWith(".xlsx")) {
       return res.status(400).json({
@@ -1094,14 +1112,11 @@ export const importLeads = async (req, res) => {
 
       const rows = await new Promise((resolve, reject) => {
         const parsedRows = [];
-
-        const parser = Readable.from([csvText]);
-
-        parser.on("error", reject);
+        const parserStream = Readable.from([csvText]);
 
         import("csv-parse")
           .then(({ parse }) => {
-            parser
+            parserStream
               .pipe(
                 parse({
                   bom: true,
@@ -1115,10 +1130,10 @@ export const importLeads = async (req, res) => {
           })
           .catch(reject);
       });
+
       const csvWorksheet = workbook.addWorksheet("Leads");
-      rows.forEach((values) => {
-        csvWorksheet.addRow(values);
-      });
+
+      rows.forEach((values) => csvWorksheet.addRow(values));
     } else {
       await workbook.xlsx.load(req.file.buffer);
     }
@@ -1132,105 +1147,129 @@ export const importLeads = async (req, res) => {
       });
     }
 
-    const normalizeHeader = (value) =>
-      String(value ?? "")
-        .trim()
-        .toLowerCase()
-        .replace(/[\s_-]+/g, "");
-    console.log("IMPORT DEBUG - filename:", req.file.originalname);
-    console.log("IMPORT DEBUG - first row:", worksheet.getRow(1).values);
-    console.log(
-      "IMPORT DEBUG - first cell:",
-      worksheet.getRow(1).getCell(1).value,
-    );
     const headerRow = worksheet.getRow(1);
-const headers = [];
+    const headers = [];
 
-headerRow.eachCell(
-  { includeEmpty: true },
-  (cell, columnNumber) => {
-    headers[columnNumber] = normalizeHeader(
-      cell.text || cell.value,
-    );
-  },
-);
+    // ExcelJS column numbers start at 1. Preserve those indices.
+    headerRow.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+      headers[columnNumber] = normalizeHeader(cell.text || cell.value);
+    });
 
-console.log("EXCEL DEBUG - filename:", req.file.originalname);
-console.log("EXCEL DEBUG - worksheet name:", worksheet.name);
-console.log("EXCEL DEBUG - row 1 values:", worksheet.getRow(1).values);
-console.log("EXCEL DEBUG - normalized headers:", headers);
-    
     const requiredColumns = ["name", "phone"];
+
+    const allowedColumns = [
+      "name",
+      "phone",
+      "email",
+      "interestedcourse",
+      "source",
+      "status",
+      "followupdate",
+      "notes",
+      "assignedcounselor",
+    ];
+
+    const actualHeaders = headers.filter(Boolean);
+
     const missingColumns = requiredColumns.filter(
-      (column) => !headers.includes(column),
+      (column) => !actualHeaders.includes(column),
     );
 
-    if (missingColumns.length > 0) {
-      return res.status(400).json({
-        message: `Missing required columns: ${missingColumns.join(", ")}`,
-      });
+    const unknownColumns = [
+      ...new Set(
+        actualHeaders.filter((header) => !allowedColumns.includes(header)),
+      ),
+    ];
+
+    const headerCounts = new Map();
+
+    for (const header of actualHeaders) {
+      headerCounts.set(header, (headerCounts.get(header) || 0) + 1);
     }
 
-    const lastRow = worksheet.rowCount - 1;
+    const duplicateColumns = [
+      ...headerCounts.entries(),
+    ]
+      .filter(([, count]) => count > 1)
+      .map(([header]) => header);
 
-    if (lastRow > 500) {
+    if (
+      missingColumns.length > 0 ||
+      unknownColumns.length > 0 ||
+      duplicateColumns.length > 0
+    ) {
+      const errors = [];
+
+      if (missingColumns.length > 0) {
+        errors.push(`Missing required columns: ${missingColumns.join(", ")}`);
+      }
+
+      if (unknownColumns.length > 0) {
+        errors.push(`Unrecognized columns: ${unknownColumns.join(", ")}`);
+      }
+
+      if (duplicateColumns.length > 0) {
+        errors.push(`Duplicate columns: ${duplicateColumns.join(", ")}`);
+      }
+
+      return res.status(400).json({ message: errors.join(". ") });
+    }
+
+    const dataRowCount = worksheet.rowCount - 1;
+
+    if (dataRowCount > 500) {
       return res.status(400).json({
         message: "You can import a maximum of 500 lead rows at a time.",
       });
     }
 
+    // Find the real Excel column number; do not subtract 1.
+    const getColumnIndex = (columnName) =>
+      headers.findIndex((header) => header === normalizeHeader(columnName));
+
+    const getCellValue = (row, columnName) => {
+      const columnIndex = getColumnIndex(columnName);
+
+      if (columnIndex === -1) return null;
+
+      return row.getCell(columnIndex).value;
+    };
+
     const getValue = (row, columnName) => {
-      const normalizedColumn = normalizeHeader(columnName);
-      const columnIndex = headers.findIndex(
-        (header) => header === normalizedColumn,
-      );
-
-      if (columnIndex === -1) return "";
-
-      const cell = row.getCell(columnIndex);
-      const value = cell.value;
+      const value = getCellValue(row, columnName);
 
       if (value === null || value === undefined) return "";
 
-      if (typeof value === "object" && !(value instanceof Date)) {
-        if ("text" in value) return String(value.text).trim();
-        if ("result" in value) return String(value.result ?? "").trim();
+      if (value instanceof Date) return value;
+
+      if (typeof value === "object") {
+        if ("text" in value) return String(value.text ?? "").trim();
+
+        if ("result" in value) {
+          return String(value.result ?? "").trim();
+        }
+
+        if ("richText" in value && Array.isArray(value.richText)) {
+          return value.richText.map((item) => item.text || "").join("").trim();
+        }
+
         return "";
       }
 
       return String(value).trim();
     };
 
-    const normalizePhone = (value) => String(value ?? "").replace(/\D/g, "");
-
-    const normalizeEmail = (value) =>
-      String(value ?? "")
-        .trim()
-        .toLowerCase();
-
-    const validSources = [
-      "website",
-      "phone",
-      "walk-in",
-      "referral",
-      "meta-ads",
-      "other",
-    ];
-
-    const validStatuses = [
-      "new",
-      "contacted",
-      "interested",
-      "follow-up",
-      "converted",
-      "lost",
-    ];
+    const validSources = leadSources;
+    const validStatuses = leadStatuses;
 
     const [existingLeads, courses, counselors] = await Promise.all([
       Lead.find({}, "name phone email").lean(),
       Course.find({}).lean(),
       isAdmin(req)
-        ? User.find({ role: "admission_counselor" }, "name email").lean()
+        ? User.find(
+            { role: "admission_counselor" },
+            "name email",
+          ).lean()
         : Promise.resolve([]),
     ]);
 
@@ -1249,30 +1288,28 @@ console.log("EXCEL DEBUG - normalized headers:", headers);
         .trim()
         .toLowerCase();
 
-      if (courseName) {
-        if (!courseByName.has(courseName)) {
-          courseByName.set(courseName, []);
-        }
+      if (!courseName) continue;
 
-        courseByName.get(courseName).push(course);
+      if (!courseByName.has(courseName)) {
+        courseByName.set(courseName, []);
       }
+
+      courseByName.get(courseName).push(course);
     }
 
     const counselorByName = new Map();
 
     for (const counselor of counselors) {
       for (const value of [counselor.name, counselor.email]) {
-        const key = String(value || "")
-          .trim()
-          .toLowerCase();
+        const key = String(value || "").trim().toLowerCase();
 
-        if (key) {
-          if (!counselorByName.has(key)) {
-            counselorByName.set(key, []);
-          }
+        if (!key) continue;
 
-          counselorByName.get(key).push(counselor);
+        if (!counselorByName.has(key)) {
+          counselorByName.set(key, []);
         }
+
+        counselorByName.get(key).push(counselor);
       }
     }
 
@@ -1287,31 +1324,23 @@ console.log("EXCEL DEBUG - normalized headers:", headers);
     for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
       const row = worksheet.getRow(rowNumber);
 
-      if (
-        row.values
-          .slice(1)
-          .every(
-            (value) => value === null || value === undefined || value === "",
-          )
-      ) {
-        continue;
-      }
+      const hasData = row.values
+        .slice(1)
+        .some((value) => value !== null && value !== undefined && value !== "");
+
+      if (!hasData) continue;
 
       results.totalRows++;
 
       try {
-        console.log("IMPORT DEBUG - headers:", headers);
-        console.log("IMPORT DEBUG - row values:", row.values);
-        console.log(
-          "IMPORT DEBUG - phone header index:",
-          headers.indexOf("phone"),
-        );
         const name = String(getValue(row, "name")).trim();
         const phone = String(getValue(row, "phone")).trim();
         const email = normalizeEmail(getValue(row, "email"));
+
         const sourceInput = String(getValue(row, "source") || "other")
           .trim()
           .toLowerCase();
+
         const statusInput = String(getValue(row, "status") || "new")
           .trim()
           .toLowerCase();
@@ -1322,20 +1351,15 @@ console.log("EXCEL DEBUG - normalized headers:", headers);
           );
         }
 
-        if (!phone || phone.length > 20) {
+        if (!validatePhone(phone)) {
           throw new Error(
-            "Phone is required and must be at most 20 characters.",
+            "Phone number must contain 7 to 15 digits and only valid phone characters.",
           );
         }
 
-        if (!normalizePhone(phone)) {
-          throw new Error("Phone must contain at least one digit.");
-        }
+        const normalizedPhone = normalizePhone(phone);
 
-        if (
-          email &&
-          (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-        ) {
+        if (email && !validateEmail(email)) {
           throw new Error("Please provide a valid email address.");
         }
 
@@ -1347,22 +1371,24 @@ console.log("EXCEL DEBUG - normalized headers:", headers);
           throw new Error(`Invalid status: ${statusInput}`);
         }
 
-        const normalizedPhone = normalizePhone(phone);
-
         if (
           existingPhones.has(normalizedPhone) ||
           (email && existingEmails.has(email))
         ) {
           results.skipped++;
+
           results.errors.push({
             row: rowNumber,
             reason: "Duplicate phone number or email address.",
           });
+
           continue;
         }
 
         let interestedCourse = null;
-        const courseInput = String(getValue(row, "interestedCourse")).trim();
+        const courseInput = String(
+          getValue(row, "interestedCourse"),
+        ).trim();
 
         if (courseInput) {
           const matches = courseByName.get(courseInput.toLowerCase()) || [];
@@ -1379,6 +1405,7 @@ console.log("EXCEL DEBUG - normalized headers:", headers);
         }
 
         let assignedCounselor = null;
+
         const counselorInput = String(
           getValue(row, "assignedCounselor"),
         ).trim();
@@ -1405,19 +1432,22 @@ console.log("EXCEL DEBUG - normalized headers:", headers);
         }
 
         let followUpDate = null;
+
+        const rawFollowUpValue = getCellValue(row, "followUpDate");
         const followUpInput = getValue(row, "followUpDate");
 
         if (followUpInput !== "") {
           let parsedDate;
 
-          if (followUpInput instanceof Date) {
-            parsedDate = followUpInput;
+          if (rawFollowUpValue instanceof Date) {
+            parsedDate = rawFollowUpValue;
           } else if (
-            typeof followUpInput === "number" &&
+            typeof rawFollowUpValue === "number" &&
             fileName.endsWith(".xlsx")
           ) {
             parsedDate = new Date(
-              Date.UTC(1899, 11, 30) + followUpInput * 24 * 60 * 60 * 1000,
+              Date.UTC(1899, 11, 30) +
+                rawFollowUpValue * 24 * 60 * 60 * 1000,
             );
           } else {
             parsedDate = new Date(String(followUpInput).trim());
@@ -1453,18 +1483,18 @@ console.log("EXCEL DEBUG - normalized headers:", headers);
           leadId: lead._id,
           userId: req.user._id,
           action: "lead_created",
-          description: "Lead imported from spreadsheet",
+          description: "Lead imported from spreadsheet.",
         });
 
+        // Track newly imported records to catch duplicates within this file.
         existingPhones.add(normalizedPhone);
 
-        if (email) {
-          existingEmails.add(email);
-        }
+        if (email) existingEmails.add(email);
 
         results.imported++;
       } catch (error) {
         results.failed++;
+
         results.errors.push({
           row: rowNumber,
           reason: error.message || "Unable to import this row.",
