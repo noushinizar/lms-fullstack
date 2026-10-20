@@ -161,7 +161,7 @@ const getActivityChangeLabel = (change, side) => {
 
   const label = change[labelKey];
 
-  if (label !== undefined && label !== null) {
+  if (label !== undefined && label !== null && label !== "") {
     return label;
   }
 
@@ -176,6 +176,20 @@ const getActivityChangeLabel = (change, side) => {
     change.field === "assignedCounselor"
   ) {
     return "Name unavailable";
+  }
+
+  // Make status values readable
+  if (change.field === "status") {
+    const statusLabels = {
+      new: "New",
+      contacted: "Contacted",
+      interested: "Interested",
+      "follow-up": "Follow-up",
+      converted: "Converted",
+      lost: "Lost",
+    };
+
+    return statusLabels[String(value).toLowerCase()] || String(value);
   }
 
   return String(value);
@@ -1332,15 +1346,26 @@ function LeadDetails() {
                                       .replace(/_/g, " ")}
                                   </p>
 
-                                  <p className="mt-1 wrap-break-word text-gray-600">
-                                    <span>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                                    <span className="text-gray-500">
+                                      Previous:
+                                    </span>
+                                    <span className="rounded-md bg-white px-2 py-1 text-gray-700 ring-1 ring-gray-200">
                                       {getActivityChangeLabel(change, "old")}
                                     </span>
-                                    <span aria-hidden="true">→</span>
-                                    <span>
+
+                                    <span
+                                      aria-hidden="true"
+                                      className="text-gray-400"
+                                    >
+                                      →
+                                    </span>
+
+                                    <span className="text-gray-500">New:</span>
+                                    <span className="rounded-md bg-purple-50 px-2 py-1 font-medium text-purple-700">
                                       {getActivityChangeLabel(change, "new")}
                                     </span>
-                                  </p>
+                                  </div>
                                 </div>
                               );
                             })}

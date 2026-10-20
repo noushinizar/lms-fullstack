@@ -14,7 +14,8 @@ import {
   getFollowUps,
   createFollowUp,
   getLeadActivities,
-  importLeads
+  importLeads,
+  convertLeadToStudent,
 } from "../controllers/leadController.js";
 
 const router = express.Router();
@@ -66,6 +67,7 @@ router.route("/").get(getLeads).post(createLead);
 
 router.post("/import", uploadLeadSpreadsheet, importLeads);
 
+router.post("/:id/convert", convertLeadToStudent);
 
 router.route("/:id").get(getLeadById).put(updateLead);
 

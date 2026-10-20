@@ -24,6 +24,7 @@ const leadActivitySchema = new mongoose.Schema(
         "status_changed",
         "counselor_reassigned",
         "follow_up_added",
+        "lead_converted",
       ],
       required: true,
     },

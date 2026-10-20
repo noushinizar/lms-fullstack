@@ -6,7 +6,9 @@ import FollowUp from "../models/FollowUp.js";
 import LeadActivity from "../models/LeadActivity.js";
 import ExcelJS from "exceljs";
 import { Readable } from "node:stream";
-
+import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
+import Enrollment from "../models/Enrollment.js";
 // ============================================================
 // CONSTANTS
 // ============================================================
@@ -46,14 +48,14 @@ const isValidId = (id) =>
   (typeof id === "string" || id instanceof mongoose.Types.ObjectId) &&
   mongoose.Types.ObjectId.isValid(id);
 
-const escapeRegex = (value) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const normalizeEmail = (value) =>
-  String(value ?? "").trim().toLowerCase();
+  String(value ?? "")
+    .trim()
+    .toLowerCase();
 
-const normalizePhone = (value) =>
-  String(value ?? "").replace(/\D/g, "");
+const normalizePhone = (value) => String(value ?? "").replace(/\D/g, "");
 
 const validatePhone = (value) => {
   if (typeof value !== "string") return false;
@@ -145,12 +147,7 @@ const getFieldLabel = async (field, value, session = null) => {
   return String(value);
 };
 
-const createAuditChange = async (
-  field,
-  oldValue,
-  newValue,
-  session = null,
-) => {
+const createAuditChange = async (field, oldValue, newValue, session = null) => {
   const oldLabel = await getFieldLabel(field, oldValue, session);
   const newLabel = await getFieldLabel(field, newValue, session);
 
@@ -204,11 +201,7 @@ const validateCourse = async (courseId) => {
 };
 
 const validateCounselor = async (counselorId) => {
-  if (
-    counselorId === undefined ||
-    counselorId === null ||
-    counselorId === ""
-  ) {
+  if (counselorId === undefined || counselorId === null || counselorId === "") {
     return { valid: true, value: null };
   }
 
@@ -511,7 +504,11 @@ export const updateLead = async (req, res) => {
     } = req.body;
 
     if (name !== undefined) {
-      if (typeof name !== "string" || !name.trim() || name.trim().length > 100) {
+      if (
+        typeof name !== "string" ||
+        !name.trim() ||
+        name.trim().length > 100
+      ) {
         return res.status(400).json({ message: "Invalid lead name." });
       }
 
@@ -788,9 +785,10 @@ const resolveActivityLabels = async (activities) => {
   );
 
   return activities.map((activity) => {
-    const item = typeof activity.toObject === "function"
-      ? activity.toObject()
-      : { ...activity };
+    const item =
+      typeof activity.toObject === "function"
+        ? activity.toObject()
+        : { ...activity };
 
     item.changes = (item.changes || []).map((change) => {
       const updated = { ...change };
@@ -1187,9 +1185,7 @@ export const importLeads = async (req, res) => {
       headerCounts.set(header, (headerCounts.get(header) || 0) + 1);
     }
 
-    const duplicateColumns = [
-      ...headerCounts.entries(),
-    ]
+    const duplicateColumns = [...headerCounts.entries()]
       .filter(([, count]) => count > 1)
       .map(([header]) => header);
 
@@ -1250,7 +1246,10 @@ export const importLeads = async (req, res) => {
         }
 
         if ("richText" in value && Array.isArray(value.richText)) {
-          return value.richText.map((item) => item.text || "").join("").trim();
+          return value.richText
+            .map((item) => item.text || "")
+            .join("")
+            .trim();
         }
 
         return "";
@@ -1266,10 +1265,7 @@ export const importLeads = async (req, res) => {
       Lead.find({}, "name phone email").lean(),
       Course.find({}).lean(),
       isAdmin(req)
-        ? User.find(
-            { role: "admission_counselor" },
-            "name email",
-          ).lean()
+        ? User.find({ role: "admission_counselor" }, "name email").lean()
         : Promise.resolve([]),
     ]);
 
@@ -1301,7 +1297,9 @@ export const importLeads = async (req, res) => {
 
     for (const counselor of counselors) {
       for (const value of [counselor.name, counselor.email]) {
-        const key = String(value || "").trim().toLowerCase();
+        const key = String(value || "")
+          .trim()
+          .toLowerCase();
 
         if (!key) continue;
 
@@ -1386,9 +1384,7 @@ export const importLeads = async (req, res) => {
         }
 
         let interestedCourse = null;
-        const courseInput = String(
-          getValue(row, "interestedCourse"),
-        ).trim();
+        const courseInput = String(getValue(row, "interestedCourse")).trim();
 
         if (courseInput) {
           const matches = courseByName.get(courseInput.toLowerCase()) || [];
@@ -1446,8 +1442,7 @@ export const importLeads = async (req, res) => {
             fileName.endsWith(".xlsx")
           ) {
             parsedDate = new Date(
-              Date.UTC(1899, 11, 30) +
-                rawFollowUpValue * 24 * 60 * 60 * 1000,
+              Date.UTC(1899, 11, 30) + rawFollowUpValue * 24 * 60 * 60 * 1000,
             );
           } else {
             parsedDate = new Date(String(followUpInput).trim());
@@ -1512,5 +1507,200 @@ export const importLeads = async (req, res) => {
     return res.status(500).json({
       message: "Unable to process the spreadsheet.",
     });
+  }
+};
+
+export const convertLeadToStudent = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    if (!isValidId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid lead ID." });
+    }
+
+    let result = null;
+
+    await session.withTransaction(async () => {
+      const lead = await Lead.findById(req.params.id).session(session);
+
+      if (!lead) {
+        const error = new Error("Lead not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Counselors may convert only their own assigned leads.
+      if (
+        !isAdmin(req) &&
+        String(lead.assignedCounselor) !== String(req.user._id)
+      ) {
+        const error = new Error(
+          "You cannot convert a lead assigned to another counselor.",
+        );
+        error.statusCode = 403;
+        throw error;
+      }
+
+      if (lead.status !== "interested") {
+        const error = new Error(
+          lead.status === "converted"
+            ? "This lead has already been converted."
+            : `Only leads with interested status can be converted. Current status: ${lead.status}.`,
+        );
+
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const email = normalizeEmail(lead.email);
+
+      if (!email || !validateEmail(email)) {
+        const error = new Error(
+          "A valid email address is required before converting this lead. Please update the lead first.",
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (!lead.interestedCourse) {
+        const error = new Error(
+          "Please assign an interested course before converting this lead.",
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const course = await Course.findById(lead.interestedCourse)
+        .select("_id")
+        .session(session);
+
+      if (!course) {
+        const error = new Error("The selected course no longer exists.");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Reuse an existing account only if it is a student.
+      let student = await User.findOne({ email }).session(session);
+      let accountCreated = false;
+
+      if (student && student.role !== "student") {
+        const error = new Error(
+          "This email belongs to a non-student account. Please resolve the account conflict before converting this lead.",
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+
+      if (!student) {
+        // Generate an unpredictable initial password.
+        // Never return it to the counselor or expose it in the response.
+        const temporaryPassword = crypto.randomBytes(32).toString("hex");
+        const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+        const [createdStudent] = await User.create(
+          [
+            {
+              name: lead.name,
+              email,
+              phone: lead.phone,
+              password: hashedPassword,
+              role: "student",
+            },
+          ],
+          { session },
+        );
+
+        student = createdStudent;
+        accountCreated = true;
+      }
+
+      let enrollment = await Enrollment.findOne({
+        studentId: student._id,
+        courseId: course._id,
+      }).session(session);
+
+      if (enrollment && ["rejected", "revoked"].includes(enrollment.status)) {
+        const error = new Error(
+          `This student already has a ${enrollment.status} enrollment for the selected course. Review the existing enrollment before proceeding.`,
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+
+      if (!enrollment) {
+        const [createdEnrollment] = await Enrollment.create(
+          [
+            {
+              studentId: student._id,
+              courseId: course._id,
+              status: "pending",
+            },
+          ],
+          { session },
+        );
+
+        enrollment = createdEnrollment;
+      }
+
+      const previousStatus = lead.status;
+      lead.status = "converted";
+      await lead.save({ session });
+
+      await logLeadActivity({
+        leadId: lead._id,
+        userId: req.user._id,
+        action: "lead_converted",
+        description: `Lead "${lead.name}" was converted to a student. Course enrollment status: ${enrollment.status}.`,
+        changes: [
+          {
+            field: "status",
+            oldValue: previousStatus,
+            newValue: "converted",
+            oldLabel: previousStatus,
+            newLabel: "converted",
+          },
+        ],
+        session,
+      });
+
+      result = {
+        studentId: String(student._id),
+        studentName: student.name,
+        studentEmail: student.email,
+        courseId: String(course._id),
+        enrollmentStatus: enrollment.status,
+        accountCreated,
+      };
+    });
+
+    return res.status(200).json({
+      message: result.accountCreated
+        ? "Lead converted. Student account created and enrollment submitted for approval."
+        : "Lead converted. Existing student account linked and enrollment checked.",
+      conversion: result,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+      });
+    }
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message:
+          "A duplicate account or enrollment was detected. Refresh the lead and check the existing student and enrollment before retrying.",
+      });
+    }
+
+    console.error("Convert lead error:", error);
+
+    return res.status(500).json({
+      message:
+        "Unable to convert this lead. No partial conversion should be committed.",
+    });
+  } finally {
+    await session.endSession();
   }
 };

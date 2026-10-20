@@ -16,6 +16,7 @@ import {
   CalendarCheck,
   CalendarClock,
   CalendarX,
+  GraduationCap,
 } from "lucide-react";
 
 import api from "../../services/api";
@@ -192,6 +193,10 @@ function Leads() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+
+  // Lead-to-student conversion state
+  const [convertingId, setConvertingId] = useState(null);
+  const [confirmConvert, setConfirmConvert] = useState(null);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -417,6 +422,48 @@ function Leads() {
     link.remove();
 
     URL.revokeObjectURL(url);
+  };
+
+  const handleConvertLead = async () => {
+    if (!confirmConvert || convertingId) return;
+
+    const lead = confirmConvert;
+
+    if (!lead.email?.trim()) {
+      setError("Add an email address to this lead before converting.");
+      setConfirmConvert(null);
+      return;
+    }
+
+    if (!lead.interestedCourse?._id) {
+      setError("Select an interested course before converting this lead.");
+      setConfirmConvert(null);
+      return;
+    }
+
+    try {
+      setConvertingId(lead._id);
+      setError("");
+      setSuccess("");
+      setConfirmConvert(null);
+
+      const response = await api.post(`/leads/${lead._id}/convert`);
+
+      setSuccess(
+        response.data?.message || `Lead "${lead.name}" converted successfully.`,
+      );
+
+      await fetchLeads();
+    } catch (err) {
+      console.error("Failed to convert lead:", err);
+
+      setError(
+        err.response?.data?.message ||
+          "Unable to convert this lead. Please try again.",
+      );
+    } finally {
+      setConvertingId(null);
+    }
   };
 
   const handleDeleteLead = async () => {
@@ -794,6 +841,33 @@ function Leads() {
                             View
                           </Link>
 
+                         {lead.status === "interested" && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setError("");
+                                  setSuccess("");
+                                  setConfirmConvert(lead);
+                                }}
+                                disabled={convertingId !== null}
+                                title="Convert lead to student"
+                                aria-label={`Convert ${lead.name} to student`}
+                                className="inline-flex items-center gap-2 rounded-lg border border-green-200 px-3 py-2 font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {convertingId === lead._id ? (
+                                  <RefreshCw
+                                    size={16}
+                                    className="animate-spin"
+                                  />
+                                ) : (
+                                  <GraduationCap size={16} />
+                                )}
+                                {convertingId === lead._id
+                                  ? "Converting..."
+                                  : "Convert"}
+                              </button>
+                            )}
+
                           {isAdmin && (
                             <button
                               type="button"
@@ -870,6 +944,72 @@ function Leads() {
               >
                 <Trash2 size={16} />
                 {deletingId !== null ? "Deleting..." : "Delete Lead"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Convert lead confirmation modal */}
+      {confirmConvert && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="convert-lead-title"
+            aria-describedby="convert-lead-description"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-700">
+              <GraduationCap size={24} />
+            </div>
+
+            <h2
+              id="convert-lead-title"
+              className="mt-4 text-xl font-bold text-gray-900"
+            >
+              Convert lead to student?
+            </h2>
+
+            <p
+              id="convert-lead-description"
+              className="mt-2 text-sm leading-6 text-gray-600"
+            >
+              Convert <strong>{confirmConvert.name}</strong> into a student and
+              submit an enrollment request for{" "}
+              <strong>
+                {confirmConvert.interestedCourse?.title ||
+                  confirmConvert.interestedCourse?.name ||
+                  "the selected course"}
+              </strong>
+              .
+            </p>
+
+            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              The student enrollment will remain pending until an admin approves
+              it. Make sure the email and course are correct.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmConvert(null)}
+                disabled={convertingId !== null}
+                className="rounded-lg border border-gray-200 px-4 py-2.5 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConvertLead}
+                disabled={convertingId !== null}
+                className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {convertingId !== null && (
+                  <RefreshCw size={16} className="animate-spin" />
+                )}
+                {convertingId !== null ? "Converting..." : "Confirm Conversion"}
               </button>
             </div>
           </div>
