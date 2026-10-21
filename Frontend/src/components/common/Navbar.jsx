@@ -68,7 +68,7 @@ function Navbar() {
   };
 
   return (
-    <div className="bg-gray-900 text-white shadow-sm border-b border-gray-800 px-8 py-4 flex justify-between items-center relative z-50">
+    <div className="sticky top-0 z-40 w-full  bg-gray-900 text-white shadow-sm border-b border-gray-800 px-8 py-4 flex justify-between items-center ">
 
       {/* ================= PAGE TITLE ================= */}
 

@@ -16,10 +16,10 @@ import {
   getLeadActivities,
   importLeads,
   convertLeadToStudent,
+  getCounselorWorkload,
 } from "../controllers/leadController.js";
 
 const router = express.Router();
-
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -31,9 +31,7 @@ const upload = multer({
     const fileName = file.originalname.toLowerCase();
 
     if (!fileName.endsWith(".csv") && !fileName.endsWith(".xlsx")) {
-      return callback(
-        new Error("Only CSV and XLSX files are supported."),
-      );
+      return callback(new Error("Only CSV and XLSX files are supported."));
     }
 
     callback(null, true);
@@ -56,7 +54,6 @@ const uploadLeadSpreadsheet = (req, res, next) => {
   });
 };
 
-
 const crmRoles = ["admin", "admission_counselor"];
 
 // All lead routes require authentication and an authorized CRM role.
@@ -64,6 +61,12 @@ router.use(protect, authorizeRoles(...crmRoles));
 
 router.route("/").get(getLeads).post(createLead);
 
+// Admin-only counselor workload dashboard data.
+router.get(
+  "/dashboard/workload",
+  authorizeRoles("admin"),
+  getCounselorWorkload,
+);
 
 router.post("/import", uploadLeadSpreadsheet, importLeads);
 

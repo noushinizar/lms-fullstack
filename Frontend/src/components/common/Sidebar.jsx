@@ -18,10 +18,10 @@ function Sidebar() {
   };
 
   return (
-    <aside className="w-70 min-h-screen bg-gray-900 shadow-xl sticky top-0 flex flex-col">
+   <aside className="fixed left-0 top-0 z-50 flex h-screen w-70 flex-col bg-gray-900 shadow-xl">
 
       {/* Logo */}
-      <div className="p-8 border-b border-gray-800">
+      <div className="p-3 border-b border-gray-800">
         <h1 className="text-3xl font-bold text-center text-amber-500">
           ASTROBYTE
         </h1>

@@ -147,6 +147,11 @@ const pageTitles = {
     title: "Lead Details",
     subtitle: "View and update enquiry information, status, and follow-up details.",
   },
+
+   "/crm/workload": {
+    title: "Counselor Workload",
+    subtitle: "Monitor counselor assignments, follow-up performance, and admission conversions.",
+  },
 };
 
 export default pageTitles;

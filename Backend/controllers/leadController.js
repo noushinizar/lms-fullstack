@@ -1704,3 +1704,182 @@ export const convertLeadToStudent = async (req, res) => {
     await session.endSession();
   }
 };
+
+
+export const getCounselorWorkload = async (req, res) => {
+  try {
+    // Only admins may view counselor workload.
+    if (!isAdmin(req)) {
+      return res.status(403).json({
+        message: "Only admins can view counselor workload.",
+      });
+    }
+
+    const now = new Date();
+
+    const [counselors, workload, unassignedLeads] =
+      await Promise.all([
+        User.find({ role: "admission_counselor" })
+          .select("_id name email")
+          .sort({ name: 1 })
+          .lean(),
+
+        Lead.aggregate([
+          {
+            $match: {
+              assignedCounselor: { $ne: null },
+            },
+          },
+          {
+            $group: {
+              _id: "$assignedCounselor",
+
+              total: { $sum: 1 },
+
+              new: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "new"] }, 1, 0],
+                },
+              },
+
+              contacted: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "contacted"] }, 1, 0],
+                },
+              },
+
+              interested: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "interested"] }, 1, 0],
+                },
+              },
+
+              followUp: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "follow-up"] }, 1, 0],
+                },
+              },
+
+              converted: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "converted"] }, 1, 0],
+                },
+              },
+
+              lost: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "lost"] }, 1, 0],
+                },
+              },
+
+              overdueFollowUps: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        {
+                          $in: [
+                            "$status",
+                            ["new", "contacted", "interested", "follow-up"],
+                          ],
+                        },
+                        { $ne: ["$followUpDate", null] },
+                        { $lt: ["$followUpDate", now] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+
+              upcomingFollowUps: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        {
+                          $in: [
+                            "$status",
+                            ["new", "contacted", "interested", "follow-up"],
+                          ],
+                        },
+                        { $ne: ["$followUpDate", null] },
+                        { $gte: ["$followUpDate", now] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+
+        Lead.countDocuments({ assignedCounselor: null }),
+      ]);
+
+    const workloadByCounselor = new Map(
+      workload.map((item) => [String(item._id), item]),
+    );
+
+    const counselorStats = counselors.map((counselor) => {
+      const stats = workloadByCounselor.get(
+        String(counselor._id),
+      );
+
+      const total = stats?.total || 0;
+      const converted = stats?.converted || 0;
+
+      return {
+        counselorId: String(counselor._id),
+        name: counselor.name,
+        email: counselor.email,
+        total,
+        statuses: {
+          new: stats?.new || 0,
+          contacted: stats?.contacted || 0,
+          interested: stats?.interested || 0,
+          followUp: stats?.followUp || 0,
+          converted,
+          lost: stats?.lost || 0,
+        },
+        overdueFollowUps: stats?.overdueFollowUps || 0,
+        upcomingFollowUps: stats?.upcomingFollowUps || 0,
+        conversionRate:
+          total > 0
+            ? Math.round((converted / total) * 10000) / 100
+            : 0,
+      };
+    });
+
+    const totalAssignedLeads = workload.reduce(
+      (sum, item) => sum + item.total,
+      0,
+    );
+
+    return res.status(200).json({
+      summary: {
+        totalCounselors: counselors.length,
+        totalAssignedLeads,
+        unassignedLeads,
+        totalOverdueFollowUps: counselorStats.reduce(
+          (sum, item) => sum + item.overdueFollowUps,
+          0,
+        ),
+        totalUpcomingFollowUps: counselorStats.reduce(
+          (sum, item) => sum + item.upcomingFollowUps,
+          0,
+        ),
+      },
+      counselors: counselorStats,
+    });
+  } catch (error) {
+    console.error("Get counselor workload error:", error);
+
+    return res.status(500).json({
+      message: "Unable to retrieve counselor workload.",
+    });
+  }
+};

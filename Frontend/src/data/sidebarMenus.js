@@ -11,6 +11,7 @@ import {
   UserPlus,
   ContactRound,
   Contact,
+  ChartNoAxesCombined,
 } from "lucide-react";
 
 export const sidebarMenus = {
@@ -48,6 +49,11 @@ export const sidebarMenus = {
     // CRM navigation
     { name: "CRM Dashboard", icon: LayoutDashboard, path: "/crm/dashboard" },
     { name: "Leads", icon: Contact, path: "/crm/leads" },
+    {
+      name: "Counselor Workload",
+      icon: ChartNoAxesCombined,
+      path: "/crm/workload",
+    },
 
     { name: "Profile", icon: User, path: "/admin/profile" },
     { name: "Logout", icon: LogOut, path: "/login" },

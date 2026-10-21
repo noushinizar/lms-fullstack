@@ -5,23 +5,19 @@ import Navbar from "../components/common/Navbar";
 
 function AdminLayout() {
   return (
-    <div className="flex">
+   
+<div className="min-h-screen">
+  <Sidebar />
 
-      <Sidebar />
+  <div className="ml-70 min-w-0">
+    <Navbar />
 
-      <div className="flex-1 bg-gray-100 min-h-screen">
+    <main className="p-6">
+      <Outlet />
+    </main>
+  </div>
+</div>
 
-        <Navbar />
-
-        <div className="p-6">
-
-          <Outlet />
-
-        </div>
-
-      </div>
-
-    </div>
   );
 }
 
