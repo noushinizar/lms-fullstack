@@ -227,7 +227,7 @@ function CrmDashboard() {
   return (
     <div className="min-h-full space-y-7 bg-slate-50/70 p-1 sm:space-y-8 sm:p-2">
       {/* Dashboard header */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950 px-6 py-7 text-white shadow-lg sm:px-8 sm:py-9">
+      <section className="relative overflow-hidden rounded-2xl bg-linear-to-br from-slate-950 via-slate-900 to-amber-950 px-6 py-7 text-white shadow-lg sm:px-8 sm:py-9">
         <div className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full bg-amber-500/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-28 right-1/3 h-52 w-52 rounded-full bg-orange-400/10 blur-3xl" />
 
@@ -368,8 +368,8 @@ function CrmDashboard() {
 
           {/* Conversion and follow-up section */}
           <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-            <article className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-400 via-orange-400 to-orange-500 p-6 text-slate-950 shadow-sm sm:p-7 xl:col-span-1">
-              <div className="absolute -right-8 -top-8 h-36 w-36 rounded-full border-[22px] border-white/15" />
+            <article className="relative overflow-hidden rounded-2xl bg-linear-to-br from-amber-400 via-orange-400 to-orange-500 p-6 text-slate-950 shadow-sm sm:p-7 xl:col-span-1">
+              <div className="absolute -right-8 -top-8 h-36 w-36 rounded-full border-22 border-white/15" />
               <div className="relative">
                 <div className="flex items-center justify-between gap-3">
                   <div className="rounded-xl bg-white/25 p-3">
@@ -653,7 +653,7 @@ function CrmDashboard() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[650px] text-left text-sm">
+                <table className="w-full min-w-162.5 text-left text-sm">
                   <thead>
                     <tr className="bg-slate-50/80 text-xs uppercase tracking-wider text-slate-500">
                       <th className="px-6 py-4 font-semibold">Lead</th>
@@ -674,7 +674,7 @@ function CrmDashboard() {
                       >
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 font-bold text-amber-700">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-amber-100 to-orange-100 font-bold text-amber-700">
                               {lead.name?.charAt(0)?.toUpperCase() || "L"}
                             </div>
                             <div>
