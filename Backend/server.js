@@ -1,6 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import cron from "node-cron";
+import { generateFollowUpReminders } from "./services/notificationService.js";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -24,6 +26,7 @@ import mentorDashboardRoutes from "./routes/mentorDashboardRoutes.js";
 import liveClassRoutes from "./routes/liveClassRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import leadRoutes from "./routes/leadRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 dotenv.config();
 
@@ -102,14 +105,33 @@ app.use("/api/users", userRoutes);
 
 app.use("/api/leads", leadRoutes);
 
+app.use("/api/notifications", notificationRoutes);
+
 app.use("/api/live-classes", liveClassRoutes);
 
 app.get("/", (req, res) => {
   res.send("LMS API Running...");
 });
 
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on ${PORT}`);
+
+  // Check follow-up reminders every 15 minutes.
+  cron.schedule("*/15 * * * *", async () => {
+    try {
+      const result = await generateFollowUpReminders();
+
+      console.log("Follow-up reminder check completed:", {
+        leadsChecked: result.leadsChecked,
+        remindersCreated: result.remindersCreated,
+      });
+    } catch (error) {
+      console.error("Scheduled follow-up reminder error:", error);
+    }
+  });
+
+  console.log("Follow-up reminder scheduler started.");
 });
