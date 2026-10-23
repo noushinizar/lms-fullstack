@@ -119,7 +119,8 @@ const pageTitles = {
 
   "/admin/counselors": {
     title: "Admission Counselors",
-    subtitle: "Manage counselors responsible for student enquiries and admissions.",
+    subtitle:
+      "Manage counselors responsible for student enquiries and admissions.",
   },
 
   "/admin/profile": {
@@ -140,17 +141,20 @@ const pageTitles = {
 
   "/crm/leads": {
     title: "Leads",
-    subtitle: "Manage enquiries, interested students, and admission follow-ups.",
+    subtitle:
+      "Manage enquiries, interested students, and admission follow-ups.",
   },
 
   "/crm/leads/:id": {
     title: "Lead Details",
-    subtitle: "View and update enquiry information, status, and follow-up details.",
+    subtitle:
+      "View and update enquiry information, status, and follow-up details.",
   },
 
-   "/crm/workload": {
-    title: "Counselor Workload",
-    subtitle: "Monitor counselor assignments, follow-up performance, and admission conversions.",
+  "/crm/workload": {
+    title: "CRM Reports",
+    subtitle:
+      "Track lead generation, conversion performance, counselor workload, and follow-up activity.",
   },
 };
 

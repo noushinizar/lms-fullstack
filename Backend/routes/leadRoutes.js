@@ -17,6 +17,8 @@ import {
   importLeads,
   convertLeadToStudent,
   getCounselorWorkload,
+  getLeadReportOverview,
+  getLeadSourceReport
 } from "../controllers/leadController.js";
 
 const router = express.Router();
@@ -61,16 +63,18 @@ router.use(protect, authorizeRoles(...crmRoles));
 
 router.route("/").get(getLeads).post(createLead);
 
-// Admin-only counselor workload dashboard data.
 router.get(
   "/dashboard/workload",
-  authorizeRoles("admin"),
   getCounselorWorkload,
 );
 
 router.post("/import", uploadLeadSpreadsheet, importLeads);
 
 router.post("/:id/convert", convertLeadToStudent);
+
+router.get("/reports/overview", getLeadReportOverview);
+
+router.get("/reports/sources", getLeadSourceReport);
 
 router.route("/:id").get(getLeadById).put(updateLead);
 

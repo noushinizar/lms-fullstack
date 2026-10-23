@@ -1706,123 +1706,213 @@ export const convertLeadToStudent = async (req, res) => {
 };
 
 
+
 export const getCounselorWorkload = async (req, res) => {
   try {
-    // Only admins may view counselor workload.
-    if (!isAdmin(req)) {
+    const admin = isAdmin(req);
+
+    // Admins see the team. Counselors see only their own leads.
+    if (!admin && req.user?.role !== "admission_counselor") {
       return res.status(403).json({
-        message: "Only admins can view counselor workload.",
+        message: "You are not authorized to view CRM reports.",
       });
     }
 
+    const range = getReportDateRange(req);
+
+    if (range.error) {
+      return res.status(400).json({
+        message: range.error,
+      });
+    }
+
+    const { start, end, previousStart, previousEnd } = range;
     const now = new Date();
 
-    const [counselors, workload, unassignedLeads] =
-      await Promise.all([
-        User.find({ role: "admission_counselor" })
-          .select("_id name email")
-          .sort({ name: 1 })
-          .lean(),
+    const dayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
 
-        Lead.aggregate([
-          {
-            $match: {
-              assignedCounselor: { $ne: null },
+    const tomorrow = new Date(dayStart);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const leadScope = getReportLeadScope(req);
+
+    const activeStatuses = [
+      "new",
+      "contacted",
+      "interested",
+      "follow-up",
+    ];
+
+    const [counselors, workload, unassignedLeads, periodLeads,
+      previousLeads, accessibleLeads] = await Promise.all([
+      admin
+        ? User.find({ role: "admission_counselor" })
+            .select("_id name email")
+            .sort({ name: 1 })
+            .lean()
+        : User.find({ _id: req.user._id })
+            .select("_id name email")
+            .lean(),
+
+      // Current workload: preserve the existing status and follow-up fields.
+      Lead.aggregate([
+        { $match: leadScope },
+        {
+          $group: {
+            _id: "$assignedCounselor",
+            total: { $sum: 1 },
+            new: {
+              $sum: { $cond: [{ $eq: ["$status", "new"] }, 1, 0] },
             },
-          },
-          {
-            $group: {
-              _id: "$assignedCounselor",
-
-              total: { $sum: 1 },
-
-              new: {
-                $sum: {
-                  $cond: [{ $eq: ["$status", "new"] }, 1, 0],
-                },
-              },
-
-              contacted: {
-                $sum: {
-                  $cond: [{ $eq: ["$status", "contacted"] }, 1, 0],
-                },
-              },
-
-              interested: {
-                $sum: {
-                  $cond: [{ $eq: ["$status", "interested"] }, 1, 0],
-                },
-              },
-
-              followUp: {
-                $sum: {
-                  $cond: [{ $eq: ["$status", "follow-up"] }, 1, 0],
-                },
-              },
-
-              converted: {
-                $sum: {
-                  $cond: [{ $eq: ["$status", "converted"] }, 1, 0],
-                },
-              },
-
-              lost: {
-                $sum: {
-                  $cond: [{ $eq: ["$status", "lost"] }, 1, 0],
-                },
-              },
-
-              overdueFollowUps: {
-                $sum: {
-                  $cond: [
-                    {
-                      $and: [
-                        {
-                          $in: [
-                            "$status",
-                            ["new", "contacted", "interested", "follow-up"],
-                          ],
-                        },
-                        { $ne: ["$followUpDate", null] },
-                        { $lt: ["$followUpDate", now] },
-                      ],
-                    },
-                    1,
-                    0,
-                  ],
-                },
-              },
-
-              upcomingFollowUps: {
-                $sum: {
-                  $cond: [
-                    {
-                      $and: [
-                        {
-                          $in: [
-                            "$status",
-                            ["new", "contacted", "interested", "follow-up"],
-                          ],
-                        },
-                        { $ne: ["$followUpDate", null] },
-                        { $gte: ["$followUpDate", now] },
-                      ],
-                    },
-                    1,
-                    0,
-                  ],
-                },
+            contacted: {
+              $sum: { $cond: [{ $eq: ["$status", "contacted"] }, 1, 0] },
+            },
+            interested: {
+              $sum: { $cond: [{ $eq: ["$status", "interested"] }, 1, 0] },
+            },
+            followUp: {
+              $sum: { $cond: [{ $eq: ["$status", "follow-up"] }, 1, 0] },
+            },
+            converted: {
+              $sum: { $cond: [{ $eq: ["$status", "converted"] }, 1, 0] },
+            },
+            lost: {
+              $sum: { $cond: [{ $eq: ["$status", "lost"] }, 1, 0] },
+            },
+            overdueFollowUps: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $in: ["$status", activeStatuses] },
+                      { $ne: ["$followUpDate", null] },
+                      { $lt: ["$followUpDate", now] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
               },
             },
+            upcomingFollowUps: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $in: ["$status", activeStatuses] },
+                      { $ne: ["$followUpDate", null] },
+                      { $gte: ["$followUpDate", now] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+            followUpsDueToday: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $in: ["$status", activeStatuses] },
+                      { $gte: ["$followUpDate", dayStart] },
+                      { $lt: ["$followUpDate", tomorrow] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
           },
-        ]),
+        },
+      ]),
 
-        Lead.countDocuments({ assignedCounselor: null }),
-      ]);
+      admin
+        ? Lead.countDocuments({ assignedCounselor: null })
+        : Promise.resolve(0),
+
+      // Leads created in the selected period.
+      Lead.find({
+        ...leadScope,
+        createdAt: { $gte: start, $lt: end },
+      })
+        .select("_id source status assignedCounselor")
+        .lean(),
+
+      // Leads created in the previous equivalent period.
+      Lead.find({
+        ...leadScope,
+        createdAt: { $gte: previousStart, $lt: previousEnd },
+      })
+        .select("_id source status")
+        .lean(),
+
+      Lead.find(leadScope).select("_id").lean(),
+    ]);
 
     const workloadByCounselor = new Map(
-      workload.map((item) => [String(item._id), item]),
+      workload.map((item) => [
+        item._id ? String(item._id) : "unassigned",
+        item,
+      ]),
     );
+
+    // Count conversion activity events for leads the user may access.
+    // LeadActivity uses "lead", not "leadId".
+    const accessibleLeadIds = accessibleLeads.map((lead) => lead._id);
+
+    let conversionEvents = [];
+    let previousConversionEvents = [];
+
+    if (accessibleLeadIds.length) {
+      const conversionPipeline = (from, to) => [
+        {
+          $match: {
+            lead: { $in: accessibleLeadIds },
+            action: "lead_converted",
+            createdAt: { $gte: from, $lt: to },
+          },
+        },
+        { $group: { _id: "$lead", eventCount: { $sum: 1 } } },
+      ];
+
+      [conversionEvents, previousConversionEvents] =
+        await Promise.all([
+          LeadActivity.aggregate(conversionPipeline(start, end)),
+          LeadActivity.aggregate(
+            conversionPipeline(previousStart, previousEnd),
+          ),
+        ]);
+    }
+
+    const leadsCreated = periodLeads.length;
+    const previousLeadsCreated = previousLeads.length;
+
+    const conversionsInPeriod = conversionEvents.reduce(
+      (sum, item) => sum + item.eventCount,
+      0,
+    );
+
+    const previousConversionsInPeriod =
+      previousConversionEvents.reduce(
+        (sum, item) => sum + item.eventCount,
+        0,
+      );
+
+    const conversionRate = leadsCreated
+      ? Math.round((conversionsInPeriod / leadsCreated) * 10000) / 100
+      : 0;
+
+    const previousConversionRate = previousLeadsCreated
+      ? Math.round(
+          (previousConversionsInPeriod / previousLeadsCreated) * 10000,
+        ) / 100
+      : 0;
 
     const counselorStats = counselors.map((counselor) => {
       const stats = workloadByCounselor.get(
@@ -1847,10 +1937,10 @@ export const getCounselorWorkload = async (req, res) => {
         },
         overdueFollowUps: stats?.overdueFollowUps || 0,
         upcomingFollowUps: stats?.upcomingFollowUps || 0,
-        conversionRate:
-          total > 0
-            ? Math.round((converted / total) * 10000) / 100
-            : 0,
+        followUpsDueToday: stats?.followUpsDueToday || 0,
+        conversionRate: total
+          ? Math.round((converted / total) * 10000) / 100
+          : 0,
       };
     });
 
@@ -1859,7 +1949,62 @@ export const getCounselorWorkload = async (req, res) => {
       0,
     );
 
+    // Source effectiveness for leads created during the selected period.
+    const sourceMap = new Map();
+
+    for (const lead of periodLeads) {
+      const source = lead.source || "other";
+
+      if (!sourceMap.has(source)) {
+        sourceMap.set(source, {
+          source,
+          totalLeads: 0,
+          convertedLeads: 0,
+          lostLeads: 0,
+        });
+      }
+
+      const item = sourceMap.get(source);
+      item.totalLeads += 1;
+
+      if (lead.status === "converted") item.convertedLeads += 1;
+      if (lead.status === "lost") item.lostLeads += 1;
+    }
+
+    const sources = [...sourceMap.values()]
+      .map((item) => ({
+        ...item,
+        conversionRate: item.totalLeads
+          ? Math.round(
+              (item.convertedLeads / item.totalLeads) * 10000,
+            ) / 100
+          : 0,
+      }))
+      .sort((a, b) => b.totalLeads - a.totalLeads);
+
+    // Funnel is current status distribution, not historical stage transitions.
+    const funnel = {
+      new: 0,
+      contacted: 0,
+      interested: 0,
+      followUp: 0,
+      converted: 0,
+      lost: 0,
+    };
+
+    for (const item of workload) {
+      funnel.new += item.new || 0;
+      funnel.contacted += item.contacted || 0;
+      funnel.interested += item.interested || 0;
+      funnel.followUp += item.followUp || 0;
+      funnel.converted += item.converted || 0;
+      funnel.lost += item.lost || 0;
+    }
+
+    const unassignedStats = workloadByCounselor.get("unassigned");
+
     return res.status(200).json({
+      // Existing fields retained for CounselorWorkload.jsx.
       summary: {
         totalCounselors: counselors.length,
         totalAssignedLeads,
@@ -1872,14 +2017,423 @@ export const getCounselorWorkload = async (req, res) => {
           (sum, item) => sum + item.upcomingFollowUps,
           0,
         ),
+
+        // New report fields.
+        leadsCreated,
+        previousLeadsCreated,
+        conversionsInPeriod,
+        previousConversionsInPeriod,
+        conversionRate,
+        previousConversionRate,
+        conversionRateChange:
+          Math.round((conversionRate - previousConversionRate) * 100) / 100,
+        followUpsDueToday: counselorStats.reduce(
+          (sum, item) => sum + item.followUpsDueToday,
+          0,
+        ),
+        unassignedLeadStatusCounts: admin
+          ? {
+              total: unassignedStats?.total || unassignedLeads,
+              new: unassignedStats?.new || 0,
+              contacted: unassignedStats?.contacted || 0,
+              interested: unassignedStats?.interested || 0,
+              followUp: unassignedStats?.followUp || 0,
+              converted: unassignedStats?.converted || 0,
+              lost: unassignedStats?.lost || 0,
+            }
+          : null,
+      },
+      period: {
+        startDate: start.toISOString(),
+        endDateExclusive: end.toISOString(),
+        previousStartDate: previousStart.toISOString(),
+        previousEndDateExclusive: previousEnd.toISOString(),
       },
       counselors: counselorStats,
+      sources,
+      funnel,
     });
   } catch (error) {
-    console.error("Get counselor workload error:", error);
+    console.error("Get counselor workload/report error:", error);
 
     return res.status(500).json({
-      message: "Unable to retrieve counselor workload.",
+      message: "Unable to retrieve counselor workload and reports.",
+    });
+  }
+};
+
+
+// ============================================================
+// CRM REPORTS — DATE AND ACCESS HELPERS
+// ============================================================
+
+const getReportDateRange = (req) => {
+  const { startDate, endDate } = req.query;
+
+  let start;
+  let end;
+
+  if (startDate || endDate) {
+    if (!startDate || !endDate) {
+      return {
+        error: "Please provide both startDate and endDate.",
+      };
+    }
+
+    start = new Date(startDate);
+    end = new Date(endDate);
+
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime())
+    ) {
+      return { error: "Invalid report date range." };
+    }
+
+    // Date-only end dates include the entire selected day.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      end.setUTCDate(end.getUTCDate() + 1);
+    }
+
+    if (start >= end) {
+      return {
+        error: "The start date must be before the end date.",
+      };
+    }
+  } else {
+    // Default range: the current calendar month in UTC.
+    const now = new Date();
+
+    start = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+
+    end = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    );
+  }
+
+  const duration = end.getTime() - start.getTime();
+
+  return {
+    start,
+    end,
+    previousStart: new Date(start.getTime() - duration),
+    previousEnd: new Date(start.getTime()),
+  };
+};
+
+const getReportLeadScope = (req) => {
+  if (isAdmin(req)) return {};
+
+  return {
+    assignedCounselor: req.user._id,
+  };
+};
+
+// ============================================================
+// CRM REPORTS — OVERVIEW
+// ============================================================
+
+export const getLeadReportOverview = async (req, res) => {
+  try {
+    const range = getReportDateRange(req);
+
+    if (range.error) {
+      return res.status(400).json({
+        message: range.error,
+      });
+    }
+
+    const {
+      start,
+      end,
+      previousStart,
+      previousEnd,
+    } = range;
+
+    const leadScope = getReportLeadScope(req);
+
+    const activeStatuses = [
+      "new",
+      "contacted",
+      "interested",
+      "follow-up",
+    ];
+
+    // Leads created during the selected period.
+    const leadsCreated = await Lead.countDocuments({
+      ...leadScope,
+      createdAt: {
+        $gte: start,
+        $lt: end,
+      },
+    });
+
+    // Leads created during the previous equivalent period.
+    const previousLeadsCreated = await Lead.countDocuments({
+      ...leadScope,
+      createdAt: {
+        $gte: previousStart,
+        $lt: previousEnd,
+      },
+    });
+
+    // Restrict conversion activities to leads this user can access.
+    const accessibleLeads = await Lead.find(leadScope)
+      .select("_id")
+      .lean();
+
+    const accessibleLeadIds = accessibleLeads.map(
+      (lead) => lead._id,
+    );
+
+    let leadsConverted = 0;
+    let previousLeadsConverted = 0;
+
+    if (accessibleLeadIds.length > 0) {
+      const conversionCounts = await LeadActivity.aggregate([
+        {
+          $match: {
+            leadId: { $in: accessibleLeadIds },
+            action: "lead_converted",
+            createdAt: {
+              $gte: previousStart,
+              $lt: end,
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            currentPeriod: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: ["$createdAt", start] },
+                      { $lt: ["$createdAt", end] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+            previousPeriod: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: ["$createdAt", previousStart] },
+                      { $lt: ["$createdAt", previousEnd] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]);
+
+      leadsConverted = conversionCounts[0]?.currentPeriod || 0;
+      previousLeadsConverted =
+        conversionCounts[0]?.previousPeriod || 0;
+    }
+
+    // Current status distribution for accessible leads.
+    const statusCounts = await Lead.aggregate([
+      {
+        $match: leadScope,
+      },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const statusMap = Object.fromEntries(
+      statusCounts.map((item) => [item._id, item.count]),
+    );
+
+    const funnel = {
+      new: statusMap.new || 0,
+      contacted: statusMap.contacted || 0,
+      interested: statusMap.interested || 0,
+      followUp: statusMap["follow-up"] || 0,
+      converted: statusMap.converted || 0,
+      lost: statusMap.lost || 0,
+    };
+
+    // Follow-up metrics use the accessible leads' followUpDate.
+    const now = new Date();
+
+    const [overdueFollowUps, followUpsDueToday] =
+      await Promise.all([
+        Lead.countDocuments({
+          ...leadScope,
+          status: { $in: activeStatuses },
+          followUpDate: {
+            $ne: null,
+            $lt: now,
+          },
+        }),
+        Lead.countDocuments({
+          ...leadScope,
+          status: { $in: activeStatuses },
+          followUpDate: {
+            $gte: new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate(),
+            ),
+            $lt: new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate() + 1,
+            ),
+          },
+        }),
+      ]);
+
+    const conversionRate =
+      leadsCreated > 0
+        ? Math.round((leadsConverted / leadsCreated) * 10000) / 100
+        : 0;
+
+    const previousConversionRate =
+      previousLeadsCreated > 0
+        ? Math.round(
+            (previousLeadsConverted / previousLeadsCreated) * 10000,
+          ) / 100
+        : 0;
+
+    return res.status(200).json({
+      period: {
+        startDate: start.toISOString(),
+        endDateExclusive: end.toISOString(),
+        previousStartDate: previousStart.toISOString(),
+        previousEndDateExclusive: previousEnd.toISOString(),
+      },
+      summary: {
+        leadsCreated,
+        previousLeadsCreated,
+        leadsConverted,
+        previousLeadsConverted,
+        conversionRate,
+        previousConversionRate,
+        conversionRateChange:
+          Math.round(
+            (conversionRate - previousConversionRate) * 100,
+          ) / 100,
+        followUpsDueToday,
+        overdueFollowUps,
+      },
+      funnel,
+    });
+  } catch (error) {
+    console.error("Get lead report overview error:", error);
+
+    return res.status(500).json({
+      message: "Unable to retrieve the CRM report overview.",
+    });
+  }
+};
+
+// ============================================================
+// CRM REPORTS — LEAD SOURCE EFFECTIVENESS
+// ============================================================
+
+export const getLeadSourceReport = async (req, res) => {
+  try {
+    const range = getReportDateRange(req);
+
+    if (range.error) {
+      return res.status(400).json({
+        message: range.error,
+      });
+    }
+
+    const { start, end } = range;
+    const leadScope = getReportLeadScope(req);
+
+    const sourceStats = await Lead.aggregate([
+      {
+        $match: {
+          ...leadScope,
+          createdAt: {
+            $gte: start,
+            $lt: end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $ifNull: ["$source", "other"],
+          },
+          totalLeads: { $sum: 1 },
+          convertedLeads: {
+            $sum: {
+              $cond: [
+                { $eq: ["$status", "converted"] },
+                1,
+                0,
+              ],
+            },
+          },
+          lostLeads: {
+            $sum: {
+              $cond: [
+                { $eq: ["$status", "lost"] },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+      {
+        $sort: {
+          totalLeads: -1,
+          _id: 1,
+        },
+      },
+    ]);
+
+    const reports = sourceStats.map((item) => ({
+      source: item._id,
+      totalLeads: item.totalLeads,
+      convertedLeads: item.convertedLeads,
+      lostLeads: item.lostLeads,
+      conversionRate:
+        item.totalLeads > 0
+          ? Math.round(
+              (item.convertedLeads / item.totalLeads) * 10000,
+            ) / 100
+          : 0,
+    }));
+
+    return res.status(200).json({
+      period: {
+        startDate: start.toISOString(),
+        endDateExclusive: end.toISOString(),
+      },
+      totalLeads: reports.reduce(
+        (sum, item) => sum + item.totalLeads,
+        0,
+      ),
+      sources: reports,
+    });
+  } catch (error) {
+    console.error("Get lead source report error:", error);
+
+    return res.status(500).json({
+      message: "Unable to retrieve the lead source report.",
     });
   }
 };

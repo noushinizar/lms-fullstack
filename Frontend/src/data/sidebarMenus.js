@@ -50,7 +50,7 @@ export const sidebarMenus = {
     { name: "CRM Dashboard", icon: LayoutDashboard, path: "/crm/dashboard" },
     { name: "Leads", icon: Contact, path: "/crm/leads" },
     {
-      name: "Counselor Workload",
+      name: "CRM Reports",
       icon: ChartNoAxesCombined,
       path: "/crm/workload",
     },
@@ -62,6 +62,11 @@ export const sidebarMenus = {
   admission_counselor: [
     { name: "CRM Dashboard", icon: LayoutDashboard, path: "/crm/dashboard" },
     { name: "Leads", icon: Contact, path: "/crm/leads" },
+    {
+      name: "CRM Reports",
+      icon: ChartNoAxesCombined,
+      path: "/crm/workload",
+    },
     { name: "Logout", icon: LogOut, path: "/login" },
   ],
 };

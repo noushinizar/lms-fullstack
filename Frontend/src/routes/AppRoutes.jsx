@@ -382,15 +382,7 @@ function AppRoutes() {
           <Route path="dashboard" element={<CrmDashboard />} />
           <Route path="leads" element={<Leads />} />
           <Route path="leads/:id" element={<LeadDetails />} />
-          {/* ADMIN ONLY — COUNSELOR WORKLOAD */}
-          <Route
-            path="workload"
-            element={
-              <ProtectedRoute roles={["admin"]}>
-                <CounselorWorkload />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="workload" element={<CounselorWorkload />} />
         </Route>
 
         {/* 404 */}
