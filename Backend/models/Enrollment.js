@@ -33,7 +33,15 @@ const enrollmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    // Rejection information
+    rejectedAt: {
+      type: Date,
+    },
 
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
     // Revoke information
     revokedAt: {
       type: Date,
@@ -46,14 +54,11 @@ const enrollmentSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Prevent duplicate enrollment records
-enrollmentSchema.index(
-  { studentId: 1, courseId: 1 },
-  { unique: true }
-);
+enrollmentSchema.index({ studentId: 1, courseId: 1 }, { unique: true });
 
 const Enrollment = mongoose.model("Enrollment", enrollmentSchema);
 

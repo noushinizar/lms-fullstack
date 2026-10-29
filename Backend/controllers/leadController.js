@@ -57,25 +57,104 @@ const normalizeEmail = (value) =>
 
 const normalizePhone = (value) => String(value ?? "").replace(/\D/g, "");
 
+
+const findDuplicateLead = async ({ phone, email, excludeLeadId }) => {
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedEmail = normalizeEmail(email);
+
+  // Load existing contact details so phone formatting differences
+  // do not prevent duplicate detection.
+  const existingLeads = await Lead.find({
+    ...(excludeLeadId ? { _id: { $ne: excludeLeadId } } : {}),
+  })
+    .select("_id phone email")
+    .lean();
+
+  const duplicates = [];
+
+  if (
+    normalizedPhone &&
+    existingLeads.some(
+      (lead) => normalizePhone(lead.phone) === normalizedPhone,
+    )
+  ) {
+    duplicates.push({ field: "phone" });
+  }
+
+  if (
+    normalizedEmail &&
+    existingLeads.some(
+      (lead) => normalizeEmail(lead.email) === normalizedEmail,
+    )
+  ) {
+    duplicates.push({ field: "email" });
+  }
+
+  return duplicates;
+};
+
+
+// Phone numbers may contain a leading + and common visual separators,
+// but must contain 7–15 digits and cannot contain letters or other symbols.
 const validatePhone = (value) => {
   if (typeof value !== "string") return false;
 
   const phone = value.trim();
 
-  if (!phone || phone.length > 20) return false;
+  if (!phone || phone.length > 25) return false;
 
-  // Accept an optional leading +, spaces, parentheses, dots and hyphens.
-  if (!/^\+?[\d\s().-]+$/.test(phone)) return false;
+  // Only allow digits, spaces, parentheses, dots, hyphens and one leading +.
+  if (!/^\+?[0-9\s().-]+$/.test(phone)) return false;
+
+  // Parentheses must be balanced and cannot be empty.
+  let parenthesisDepth = 0;
+  for (const character of phone) {
+    if (character === "(") {
+      parenthesisDepth++;
+    } else if (character === ")") {
+      parenthesisDepth--;
+      if (parenthesisDepth < 0) return false;
+    }
+  }
+  if (parenthesisDepth !== 0 || /\(\s*\)/.test(phone)) return false;
 
   const digits = normalizePhone(phone);
-
   return digits.length >= 7 && digits.length <= 15;
 };
 
-const validateEmail = (value) =>
-  typeof value === "string" &&
-  value.length <= 254 &&
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+// Validate a conventional email address and reject malformed domain labels,
+// repeated dots, whitespace, missing TLDs, and leading/trailing hyphens.
+const validateEmail = (value) => {
+  if (typeof value !== "string") return false;
+
+  const email = value.trim();
+  if (!email || email.length > 254 || /\s/.test(email)) return false;
+
+  const parts = email.split("@");
+  if (parts.length !== 2) return false;
+
+  const [localPart, domain] = parts;
+  if (!localPart || localPart.length > 64 || !domain || domain.length > 253) {
+    return false;
+  }
+
+  // Disallow consecutive dots and dots at either end of the local part.
+  if (localPart.startsWith(".") || localPart.endsWith(".") || localPart.includes("..")) {
+    return false;
+  }
+
+  // Permit common email local-part characters; domain must have valid labels.
+  if (!/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(localPart)) return false;
+
+  const labels = domain.split(".");
+  if (labels.length < 2) return false;
+
+  const validDomainLabel = /^[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?$/i;
+  if (labels.some((label) => !validDomainLabel.test(label))) return false;
+
+  // Require a 2+ character alphabetic TLD (e.g. .com, .in, .academy).
+  return /^[A-Z]{2,63}$/i.test(labels[labels.length - 1]);
+};
 
 const parseOptionalDate = (value) => {
   if (value === undefined || value === null || value === "") {
@@ -219,6 +298,7 @@ const validateCounselor = async (counselorId) => {
 // CREATE LEAD
 // ============================================================
 
+
 export const createLead = async (req, res) => {
   try {
     const {
@@ -276,6 +356,19 @@ export const createLead = async (req, res) => {
 
     if (!dateResult.valid) {
       return res.status(400).json({ message: "Invalid follow-up date." });
+    }
+
+    // Check whether another lead already uses this phone number or email.
+    const duplicates = await findDuplicateLead({
+      phone,
+      email: normalizedEmail,
+    });
+
+    if (duplicates.length > 0) {
+      return res.status(409).json({
+        message: "A lead with this phone number or email already exists.",
+        duplicates,
+      });
     }
 
     const courseResult = await validateCourse(interestedCourse);
@@ -348,6 +441,7 @@ export const createLead = async (req, res) => {
     return res.status(500).json({ message: "Unable to create lead." });
   }
 };
+
 
 // ============================================================
 // GET AND FILTER LEADS
@@ -454,42 +548,30 @@ export const getLeadById = async (req, res) => {
 // UPDATE LEAD
 // ============================================================
 
+
+
+
 export const updateLead = async (req, res) => {
+  let session;
+
   try {
     if (!isValidId(req.params.id)) {
       return res.status(400).json({ message: "Invalid lead ID." });
     }
 
-    const lead = await Lead.findById(req.params.id);
+    // Read the lead and validate the request before starting the transaction.
+    const existingLead = await Lead.findById(req.params.id);
 
-    if (!lead) {
+    if (!existingLead) {
       return res.status(404).json({ message: "Lead not found." });
     }
 
     if (
       !isAdmin(req) &&
-      String(lead.assignedCounselor) !== String(req.user._id)
+      String(existingLead.assignedCounselor) !== String(req.user._id)
     ) {
       return res.status(403).json({ message: "You cannot update this lead." });
     }
-
-    const previousValues = {
-      name: lead.name,
-      email: lead.email,
-      phone: lead.phone,
-      interestedCourse: lead.interestedCourse
-        ? String(lead.interestedCourse)
-        : null,
-      source: lead.source,
-      status: lead.status,
-      assignedCounselor: lead.assignedCounselor
-        ? String(lead.assignedCounselor)
-        : null,
-      followUpDate: lead.followUpDate
-        ? new Date(lead.followUpDate).toISOString()
-        : null,
-      notes: lead.notes,
-    };
 
     const {
       name,
@@ -503,6 +585,16 @@ export const updateLead = async (req, res) => {
       notes,
     } = req.body;
 
+    // A lead must be converted through the dedicated conversion endpoint.
+    // This prevents status changes that do not create a student account
+    // and submit the course enrollment.
+    if (status === "converted") {
+      return res.status(400).json({
+        message:
+          'You cannot manually set a lead to "converted". Use the lead conversion action instead.',
+      });
+    }
+
     if (name !== undefined) {
       if (
         typeof name !== "string" ||
@@ -511,33 +603,29 @@ export const updateLead = async (req, res) => {
       ) {
         return res.status(400).json({ message: "Invalid lead name." });
       }
-
-      lead.name = name.trim();
     }
+
+    let normalizedEmail;
 
     if (email !== undefined) {
       if (typeof email !== "string") {
         return res.status(400).json({ message: "Invalid email address." });
       }
 
-      const normalizedEmail = normalizeEmail(email);
+      normalizedEmail = normalizeEmail(email);
 
       if (normalizedEmail && !validateEmail(normalizedEmail)) {
         return res.status(400).json({ message: "Invalid email address." });
       }
-
-      lead.email = normalizedEmail;
     }
 
-    if (phone !== undefined) {
-      if (!validatePhone(phone)) {
-        return res.status(400).json({
-          message: "Enter a valid phone number containing 7 to 15 digits.",
-        });
-      }
-
-      lead.phone = phone.trim();
+    if (phone !== undefined && !validatePhone(phone)) {
+      return res.status(400).json({
+        message: "Enter a valid phone number containing 7 to 15 digits.",
+      });
     }
+
+    let validatedCourse;
 
     if (interestedCourse !== undefined) {
       const result = await validateCourse(interestedCourse);
@@ -548,24 +636,18 @@ export const updateLead = async (req, res) => {
         });
       }
 
-      lead.interestedCourse = result.value;
+      validatedCourse = result.value;
     }
 
-    if (source !== undefined) {
-      if (!leadSources.includes(source)) {
-        return res.status(400).json({ message: "Invalid lead source." });
-      }
-
-      lead.source = source;
+    if (source !== undefined && !leadSources.includes(source)) {
+      return res.status(400).json({ message: "Invalid lead source." });
     }
 
-    if (status !== undefined) {
-      if (!leadStatuses.includes(status)) {
-        return res.status(400).json({ message: "Invalid lead status." });
-      }
-
-      lead.status = status;
+    if (status !== undefined && !leadStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid lead status." });
     }
+
+    let validatedFollowUpDate;
 
     if (followUpDate !== undefined) {
       const result = parseOptionalDate(followUpDate);
@@ -574,7 +656,7 @@ export const updateLead = async (req, res) => {
         return res.status(400).json({ message: "Invalid follow-up date." });
       }
 
-      lead.followUpDate = result.value;
+      validatedFollowUpDate = result.value;
     }
 
     if (notes !== undefined) {
@@ -583,9 +665,9 @@ export const updateLead = async (req, res) => {
           message: "Notes cannot exceed 5000 characters.",
         });
       }
-
-      lead.notes = notes.trim();
     }
+
+    let validatedCounselor;
 
     if (isAdmin(req) && assignedCounselor !== undefined) {
       const result = await validateCounselor(assignedCounselor);
@@ -596,86 +678,201 @@ export const updateLead = async (req, res) => {
         });
       }
 
-      lead.assignedCounselor = result.value;
+      validatedCounselor = result.value;
     }
 
-    await lead.save();
+    const candidatePhone =
+      phone !== undefined ? phone.trim() : existingLead.phone;
 
-    const fieldsToTrack = [
-      "name",
-      "email",
-      "phone",
-      "interestedCourse",
-      "source",
-      "status",
-      "assignedCounselor",
-      "followUpDate",
-      "notes",
-    ];
+    const candidateEmail =
+      email !== undefined ? normalizedEmail : existingLead.email;
 
-    const changes = [];
+    const duplicates = await findDuplicateLead({
+      phone: candidatePhone,
+      email: candidateEmail,
+      excludeLeadId: existingLead._id,
+    });
 
-    for (const field of fieldsToTrack) {
-      let newValue = lead[field];
-
-      if (field === "interestedCourse" || field === "assignedCounselor") {
-        newValue = newValue ? String(newValue) : null;
-      }
-
-      if (field === "followUpDate") {
-        newValue = newValue ? new Date(newValue).toISOString() : null;
-      }
-
-      if (previousValues[field] === newValue) continue;
-
-      changes.push(
-        await createAuditChange(
-          field,
-          previousValues[field] ?? null,
-          newValue ?? null,
-        ),
-      );
-    }
-
-    if (changes.length > 0) {
-      const statusChanged = changes.some((item) => item.field === "status");
-      const counselorChanged = changes.some(
-        (item) => item.field === "assignedCounselor",
-      );
-
-      const action = statusChanged
-        ? "status_changed"
-        : counselorChanged
-          ? "counselor_reassigned"
-          : "lead_updated";
-
-      const description = statusChanged
-        ? `Lead status changed from "${previousValues.status}" to "${lead.status}".`
-        : counselorChanged
-          ? "Lead counselor assignment changed."
-          : `Lead details updated: ${changes
-              .map((item) => item.field)
-              .join(", ")}.`;
-
-      await logLeadActivity({
-        leadId: lead._id,
-        userId: req.user._id,
-        action,
-        description,
-        changes,
+    if (duplicates.length > 0) {
+      return res.status(409).json({
+        message: "Another lead already uses this phone number or email.",
+        duplicates,
       });
     }
 
+    session = await mongoose.startSession();
+
+    let updatedLead;
+
+    await session.withTransaction(async () => {
+      // Reload the lead inside the transaction to avoid relying on a stale document.
+      const lead = await Lead.findById(req.params.id).session(session);
+
+      if (!lead) {
+        const error = new Error("Lead not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (
+        !isAdmin(req) &&
+        String(lead.assignedCounselor) !== String(req.user._id)
+      ) {
+        const error = new Error("You cannot update this lead.");
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // Recheck inside the transaction in case the lead was converted
+      // after the initial read.
+      if (lead.status === "converted") {
+        const error = new Error(
+          "This lead has already been converted and cannot be edited through this endpoint.",
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const previousValues = {
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        interestedCourse: lead.interestedCourse
+          ? String(lead.interestedCourse)
+          : null,
+        source: lead.source,
+        status: lead.status,
+        assignedCounselor: lead.assignedCounselor
+          ? String(lead.assignedCounselor)
+          : null,
+        followUpDate: lead.followUpDate
+          ? new Date(lead.followUpDate).toISOString()
+          : null,
+        notes: lead.notes,
+      };
+
+      if (name !== undefined) lead.name = name.trim();
+      if (email !== undefined) lead.email = normalizedEmail;
+      if (phone !== undefined) lead.phone = phone.trim();
+
+      if (interestedCourse !== undefined) {
+        lead.interestedCourse = validatedCourse;
+      }
+
+      if (source !== undefined) lead.source = source;
+      if (status !== undefined) lead.status = status;
+
+      if (followUpDate !== undefined) {
+        lead.followUpDate = validatedFollowUpDate;
+      }
+
+      if (notes !== undefined) lead.notes = notes.trim();
+
+      if (isAdmin(req) && assignedCounselor !== undefined) {
+        lead.assignedCounselor = validatedCounselor;
+      }
+
+      await lead.save({ session });
+
+      const fieldsToTrack = [
+        "name",
+        "email",
+        "phone",
+        "interestedCourse",
+        "source",
+        "status",
+        "assignedCounselor",
+        "followUpDate",
+        "notes",
+      ];
+
+      const changes = [];
+
+      for (const field of fieldsToTrack) {
+        let newValue = lead[field];
+
+        if (field === "interestedCourse" || field === "assignedCounselor") {
+          newValue = newValue ? String(newValue) : null;
+        }
+
+        if (field === "followUpDate") {
+          newValue = newValue ? new Date(newValue).toISOString() : null;
+        }
+
+        if (previousValues[field] === newValue) continue;
+
+        changes.push(
+          await createAuditChange(
+            field,
+            previousValues[field] ?? null,
+            newValue ?? null,
+            session,
+          ),
+        );
+      }
+
+      if (changes.length > 0) {
+        const statusChanged = changes.some((item) => item.field === "status");
+
+        const counselorChanged = changes.some(
+          (item) => item.field === "assignedCounselor",
+        );
+
+        const action = statusChanged
+          ? "status_changed"
+          : counselorChanged
+            ? "counselor_reassigned"
+            : "lead_updated";
+
+        const description = statusChanged
+          ? `Lead status changed from "${previousValues.status}" to "${lead.status}".`
+          : counselorChanged
+            ? "Lead counselor assignment changed."
+            : `Lead details updated: ${changes
+                .map((item) => item.field)
+                .join(", ")}.`;
+
+        await logLeadActivity({
+          leadId: lead._id,
+          userId: req.user._id,
+          action,
+          description,
+          changes,
+          session,
+        });
+      }
+
+      updatedLead = lead;
+    });
+
     return res.status(200).json({
       message: "Lead updated successfully.",
-      lead,
+      lead: updatedLead,
     });
   } catch (error) {
     console.error("Update lead error:", error);
 
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+      });
+    }
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: "Another lead already uses this phone number or email.",
+      });
+    }
+
     return res.status(500).json({ message: "Unable to update lead." });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
+
+
 
 // ============================================================
 // DELETE LEAD — ADMIN ONLY
@@ -2195,7 +2392,7 @@ export const getLeadReportOverview = async (req, res) => {
       const conversionCounts = await LeadActivity.aggregate([
         {
           $match: {
-            leadId: { $in: accessibleLeadIds },
+            lead: { $in: accessibleLeadIds },
             action: "lead_converted",
             createdAt: {
               $gte: previousStart,

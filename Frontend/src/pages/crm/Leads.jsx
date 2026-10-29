@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import api from "../../services/api";
+import { toast } from "react-toastify";
 
 const initialForm = {
   name: "",
@@ -30,6 +31,22 @@ const initialForm = {
   status: "new",
   followUpDate: "",
   notes: "",
+};
+
+// Validate contact details before sending a lead to the API.
+const validateEmail = (value) => {
+  if (!value.trim()) return true; // Email is optional when creating a lead.
+  return (
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) &&
+    value.trim().length <= 254
+  );
+};
+
+const validatePhone = (value) => {
+  const phone = value.trim();
+  if (!phone || !/^\+?[\d\s().-]+$/.test(phone)) return false;
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 7 && digits.length <= 15;
 };
 
 const statusOptions = [
@@ -203,6 +220,7 @@ function Leads() {
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(initialForm);
+  const [fieldErrors, setFieldErrors] = useState({ email: "", phone: "" });
 
   // Spreadsheet import state
   const [showImport, setShowImport] = useState(false);
@@ -318,10 +336,43 @@ function Leads() {
       ...previous,
       [name]: value,
     }));
+
+    if (name === "email") {
+      setFieldErrors((previous) => ({
+        ...previous,
+        email: validateEmail(value)
+          ? ""
+          : "Please enter a valid email address.",
+      }));
+    }
+
+    if (name === "phone") {
+      setFieldErrors((previous) => ({
+        ...previous,
+        phone: validatePhone(value)
+          ? ""
+          : "Enter a valid phone number containing 7–15 digits.",
+      }));
+    }
   };
 
   const handleCreateLead = async (event) => {
     event.preventDefault();
+
+    const nextFieldErrors = {
+      email: validateEmail(form.email)
+        ? ""
+        : "Please enter a valid email address.",
+      phone: validatePhone(form.phone)
+        ? ""
+        : "Enter a valid phone number containing 7–15 digits.",
+    };
+    setFieldErrors(nextFieldErrors);
+
+    if (nextFieldErrors.email || nextFieldErrors.phone) {
+      toast.error("Please correct the highlighted contact details.");
+      return;
+    }
 
     try {
       setSaving(true);
@@ -340,17 +391,28 @@ function Leads() {
       await api.post("/leads", payload);
 
       setForm(initialForm);
+      setFieldErrors({ email: "", phone: "" });
       setShowForm(false);
       setFollowUpFilter("all");
 
       // Clear the URL filter too, so it cannot reapply the old selection.
       setSearchParams({}, { replace: true });
 
-      setSuccess("Lead created successfully.");
+      toast.success("Lead created successfully.");
 
       await fetchLeads();
     } catch (err) {
       console.error("Failed to create lead:", err);
+
+      if (err.response?.status === 409) {
+        // Show a clear toast and keep the form open so the user can correct it.
+        setError("");
+        toast.error(
+          err.response?.data?.message ||
+            "A lead with this phone number or email already exists. Please check your existing leads.",
+        );
+        return;
+      }
 
       setError(err.response?.data?.message || "Unable to create lead.");
     } finally {
@@ -380,6 +442,7 @@ function Leads() {
 
       setImportResult(response.data.results);
       setImportFile(null);
+      toast.success("Lead import completed successfully.");
 
       await fetchLeads();
     } catch (err) {
@@ -449,7 +512,7 @@ function Leads() {
 
       const response = await api.post(`/leads/${lead._id}/convert`);
 
-      setSuccess(
+      toast.success(
         response.data?.message || `Lead "${lead.name}" converted successfully.`,
       );
 
@@ -481,7 +544,7 @@ function Leads() {
 
       setLeads((previous) => previous.filter((item) => item._id !== lead._id));
 
-      setSuccess(`Lead "${lead.name}" deleted successfully.`);
+      toast.success(`Lead "${lead.name}" deleted successfully.`);
 
       await fetchLeads();
     } catch (err) {
@@ -536,6 +599,7 @@ function Leads() {
             onClick={() => {
               setError("");
               setSuccess("");
+              setFieldErrors({ email: "", phone: "" });
               setShowForm(true);
             }}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 py-3 font-semibold text-white transition hover:bg-amber-600"
@@ -719,21 +783,28 @@ function Leads() {
       </section>
 
       {/* Lead table */}
-      <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/40">
         {loading ? (
-          <div className="p-12 text-center text-gray-500">Loading leads...</div>
+          <div className="flex flex-col items-center justify-center gap-3 px-6 py-16">
+            <RefreshCw size={28} className="animate-spin text-amber-500" />
+            <p className="text-sm font-medium text-slate-500">
+              Loading your leads...
+            </p>
+          </div>
         ) : filteredLeads.length === 0 ? (
-          <div className="flex flex-col items-center px-6 py-14 text-center">
-            <div className="rounded-full bg-amber-50 p-4">
+          <div className="flex flex-col items-center px-6 py-16 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 ring-1 ring-amber-100">
               <Users size={30} className="text-amber-600" />
             </div>
 
-            <h2 className="mt-4 text-lg font-bold text-gray-900">
+            <h2 className="mt-5 text-lg font-bold text-slate-800">
               No leads found
             </h2>
 
-            <p className="mt-2 max-w-md text-sm text-gray-500">
-              Try changing your filters, or add a new enquiry to get started.
+            <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
+              No enquiries match your current filters. Try adjusting your search
+              or add a new enquiry to get started.
             </p>
 
             <button
@@ -741,107 +812,183 @@ function Leads() {
               onClick={() => {
                 setError("");
                 setSuccess("");
+                setFieldErrors({ email: "", phone: "" });
                 setShowForm(true);
               }}
-              className="mt-5 rounded-lg bg-amber-500 px-5 py-2.5 font-semibold text-white hover:bg-amber-600"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-amber-200 transition hover:-translate-y-0.5 hover:bg-amber-600 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-amber-100"
             >
+              <Users size={17} />
               Add a lead
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-275 text-left text-sm">
-              <thead className="bg-amber-200 text-xs uppercase tracking-wide text-amber-700">
-                <tr>
-                  <th className="px-5 py-4">Lead</th>
-                  <th className="px-5 py-4">Phone</th>
-                  <th className="px-5 py-4">Interested Course</th>
-                  <th className="px-5 py-4">Source</th>
-                  <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4">Follow-up</th>
-                  <th className="px-5 py-4">Counselor</th>
-                  <th className="px-5 py-4">Created</th>
-                  <th className="px-5 py-4">Action</th>
-                </tr>
-              </thead>
+          <>
+            {/* Table heading */}
+            <div className="flex flex-col gap-2 border-b border-slate-100 bg-linear-to-r from-white via-amber-50/30 to-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div>
+                <h2 className="text-base font-bold tracking-tight text-slate-800">
+                  Lead Directory
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Manage enquiries, track follow-ups, and convert prospects.
+                </p>
+              </div>
 
-              <tbody className="divide-y divide-gray-100">
-                {filteredLeads.map((lead) => {
-                  const category = getFollowUpCategory(lead, today);
-                  const followUp = followUpStyles[category];
+              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-100 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                <Users size={14} />
+                {filteredLeads.length}{" "}
+                {filteredLeads.length === 1 ? "lead" : "leads"}
+              </span>
+            </div>
 
-                  return (
-                    <tr key={lead._id} className="transition hover:bg-gray-50">
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-gray-900">
-                          {lead.name}
-                        </p>
+            {/* Responsive table */}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-287.5 border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-amber-200 bg-amber-300">
+                    {[
+                      "Lead",
+                      "Phone",
+                      "Interested Course",
+                      "Source",
+                      "Status",
+                      "Follow-up",
+                      "Counselor",
+                      "Created",
+                      "Actions",
+                    ].map((heading) => (
+                      <th
+                        key={heading}
+                        scope="col"
+                        className="whitespace-nowrap px-5 py-4 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800 first:pl-6 last:pr-6"
+                      >
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
 
-                        <p className="mt-1 text-xs text-gray-500">
-                          {lead.email || "No email"}
-                        </p>
-                      </td>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredLeads.map((lead) => {
+                    const category = getFollowUpCategory(lead, today);
+                    const followUp = followUpStyles[category];
 
-                      <td className="whitespace-nowrap px-5 py-4 text-gray-600">
-                        {lead.phone || "—"}
-                      </td>
+                    return (
+                      <tr
+                        key={lead._id}
+                        className="group transition-colors duration-200 hover:bg-amber-50/40"
+                      >
+                        {/* Lead details */}
+                        <td className="px-5 py-4 pl-6">
+                          <div className="flex min-w-43.75 items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-linear-to-br from-amber-50 to-orange-100 text-sm font-bold uppercase text-amber-700 transition group-hover:from-amber-100 group-hover:to-orange-100">
+                              {(lead.name || "?").trim().charAt(0)}
+                            </div>
 
-                      <td className="px-5 py-4 text-gray-600">
-                        {lead.interestedCourse?.title ||
-                          lead.interestedCourse?.name ||
-                          "—"}
-                      </td>
+                            <div className="min-w-0">
+                              <p
+                                className="max-w-47.5 truncate font-semibold text-slate-800"
+                                title={lead.name}
+                              >
+                                {lead.name}
+                              </p>
+                              <p
+                                className="mt-1 max-w-47.5 truncate text-xs text-amber-800"
+                                title={lead.email || ""}
+                              >
+                                {lead.email || "No email provided"}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
 
-                      <td className="px-5 py-4 capitalize text-gray-600">
-                        {(lead.source || "other").replace("-", " ")}
-                      </td>
+                        {/* Phone */}
+                        <td className="whitespace-nowrap px-5 py-4 text-amber-800 ">
+                          {lead.phone || "—"}
+                        </td>
 
-                      <td className="px-5 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${
-                            statusStyles[lead.status] ||
-                            "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {(lead.status || "new").replace("-", " ")}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex flex-col items-start gap-1.5">
+                        {/* Course */}
+                        <td className="px-5 py-4">
                           <span
-                            className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${followUp.className}`}
+                            className="block max-w-45 truncate font-medium text-slate-700"
+                            title={
+                              lead.interestedCourse?.title ||
+                              lead.interestedCourse?.name ||
+                              ""
+                            }
                           >
-                            {followUp.label}
+                            {lead.interestedCourse?.title ||
+                              lead.interestedCourse?.name ||
+                              "—"}
                           </span>
+                        </td>
 
-                          <span className="whitespace-nowrap text-xs text-gray-500">
-                            {formatDate(lead.followUpDate)}
+                        {/* Source */}
+                        <td className="px-5 py-4">
+                          <span className="inline-flex whitespace-nowrap rounded-lg border border-slate-200 bg-amber-100 px-2.5 py-1.5 text-xs font-medium capitalize text-slate-600">
+                            {(lead.source || "other").replace("-", " ")}
                           </span>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-5 py-4 text-gray-600">
-                        {lead.assignedCounselor?.name || "Unassigned"}
-                      </td>
-
-                      <td className="whitespace-nowrap px-5 py-4 text-gray-500">
-                        {formatDate(lead.createdAt)}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            to={`/crm/leads/${lead._id}`}
-                            aria-label={`View ${lead.name}`}
-                            title="View lead"
-                            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 font-medium text-gray-700 hover:border-amber-400 hover:text-amber-700"
+                        {/* Status */}
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold capitalize ring-1 ring-inset ${
+                              statusStyles[lead.status] ||
+                              "bg-slate-100 text-slate-600 ring-slate-200"
+                            }`}
                           >
-                            <Eye size={16} />
-                            View
-                          </Link>
+                            <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+                            {(lead.status || "new").replace("-", " ")}
+                          </span>
+                        </td>
 
-                         {lead.status === "interested" && (
+                        {/* Follow-up */}
+                        <td className="px-5 py-4">
+                          <div className="flex min-w-31.25 flex-col items-start gap-1.5">
+                            <span
+                              className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${followUp.className}`}
+                            >
+                              {followUp.label}
+                            </span>
+                            <span className="whitespace-nowrap text-xs text-slate-500">
+                              {formatDate(lead.followUpDate)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Counselor */}
+                        <td className="px-5 py-4">
+                          <div className="flex min-w-32.5 items-center gap-2">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold uppercase text-slate-600">
+                              {(lead.assignedCounselor?.name || "U")
+                                .trim()
+                                .charAt(0)}
+                            </div>
+                            <span className="max-w-32.5 truncate text-slate-600">
+                              {lead.assignedCounselor?.name || "Unassigned"}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Created date */}
+                        <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-500">
+                          {formatDate(lead.createdAt)}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-5 py-4 pr-6">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              to={`/crm/leads/${lead._id}`}
+                              aria-label={`View ${lead.name}`}
+                              title="View lead details"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-600 shadow-sm transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                            >
+                              <Eye size={18} />
+                            </Link>
+
+                            {lead.status === "interested" && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -852,47 +999,64 @@ function Leads() {
                                 disabled={convertingId !== null}
                                 title="Convert lead to student"
                                 aria-label={`Convert ${lead.name} to student`}
-                                className="inline-flex items-center gap-2 rounded-lg border border-green-200 px-3 py-2 font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 {convertingId === lead._id ? (
+                                  <RefreshCw
+                                    size={15}
+                                    className="animate-spin"
+                                  />
+                                ) : (
+                                  <GraduationCap size={15} />
+                                )}
+
+                                <span>
+                                  {convertingId === lead._id
+                                    ? "Converting..."
+                                    : "Convert"}
+                                </span>
+                              </button>
+                            )}
+
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete(lead)}
+                                disabled={deletingId !== null}
+                                aria-label={`Delete ${lead.name}`}
+                                title="Delete lead"
+                                className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-white p-2 text-rose-600 shadow-sm transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {deletingId === lead._id ? (
                                   <RefreshCw
                                     size={16}
                                     className="animate-spin"
                                   />
                                 ) : (
-                                  <GraduationCap size={16} />
+                                  <Trash2 size={16} />
                                 )}
-                                {convertingId === lead._id
-                                  ? "Converting..."
-                                  : "Convert"}
                               </button>
                             )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDelete(lead)}
-                              disabled={deletingId !== null}
-                              aria-label={`Delete ${lead.name}`}
-                              title="Delete lead"
-                              className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {deletingId === lead._id ? (
-                                <RefreshCw size={16} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={16} />
-                              )}
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+            {/* Horizontal scroll hint on small screens */}
+            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-5 py-3 sm:px-6">
+              <p className="text-xs text-slate-500">
+                Showing {filteredLeads.length}{" "}
+                {filteredLeads.length === 1 ? "lead" : "leads"}
+              </p>
+              <p className="text-[11px] font-medium text-slate-400">
+                Scroll horizontally to see all columns
+              </p>
+            </div>
+          </>
         )}
       </section>
 
@@ -1096,8 +1260,21 @@ function Leads() {
                     required
                     maxLength={20}
                     placeholder="Enter phone number"
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-amber-500"
+                    aria-invalid={Boolean(fieldErrors.phone)}
+                    aria-describedby={
+                      fieldErrors.phone ? "phone-error" : undefined
+                    }
+                    className={`w-full rounded-lg border px-4 py-3 outline-none focus:border-amber-500 ${fieldErrors.phone ? "border-red-500 focus:ring-2 focus:ring-red-100" : "border-gray-200"}`}
                   />
+                  {fieldErrors.phone && (
+                    <p
+                      id="phone-error"
+                      className="mt-1.5 text-sm text-red-600"
+                      role="alert"
+                    >
+                      {fieldErrors.phone}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1116,8 +1293,21 @@ function Leads() {
                     onChange={handleFormChange}
                     maxLength={254}
                     placeholder="name@example.com"
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-amber-500"
+                    aria-invalid={Boolean(fieldErrors.email)}
+                    aria-describedby={
+                      fieldErrors.email ? "email-error" : undefined
+                    }
+                    className={`w-full rounded-lg border px-4 py-3 outline-none focus:border-amber-500 ${fieldErrors.email ? "border-red-500 focus:ring-2 focus:ring-red-100" : "border-gray-200"}`}
                   />
+                  {fieldErrors.email && (
+                    <p
+                      id="email-error"
+                      className="mt-1.5 text-sm text-red-600"
+                      role="alert"
+                    >
+                      {fieldErrors.email}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1185,11 +1375,13 @@ function Leads() {
                     required
                     className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 outline-none focus:border-amber-500"
                   >
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status.replace("-", " ")}
-                      </option>
-                    ))}
+                    {statusOptions
+                      .filter((status) => status !== "converted")
+                      .map((status) => (
+                        <option key={status} value={status}>
+                          {status.replace("-", " ")}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -1244,7 +1436,9 @@ function Leads() {
 
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={
+                    saving || Boolean(fieldErrors.email || fieldErrors.phone)
+                  }
                   className="rounded-lg bg-amber-500 px-6 py-3 font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving ? "Saving..." : "Create Lead"}

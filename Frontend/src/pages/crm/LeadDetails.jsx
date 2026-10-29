@@ -19,6 +19,72 @@ import {
 } from "lucide-react";
 
 import api from "../../services/api";
+import { toast } from "react-toastify";
+
+function validatePhone(value) {
+  const phone = String(value ?? "").trim();
+
+  if (!phone) return "Phone number is required.";
+  if (phone.length > 25) return "Phone number cannot exceed 25 characters.";
+  if (!/^\+?[0-9\s().-]+$/.test(phone)) {
+    return "Use only digits, spaces, +, parentheses, hyphens, or periods.";
+  }
+  if ((phone.match(/\(/g) || []).length !== (phone.match(/\)/g) || []).length) {
+    return "Please check the parentheses in the phone number.";
+  }
+  if (phone.includes("()")) return "Please enter a valid phone number.";
+
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) {
+    return "Phone number must contain 7 to 15 digits.";
+  }
+
+  return "";
+}
+
+function validateEmail(value) {
+  const email = String(value ?? "").trim();
+
+  // Email is optional for a lead.
+  if (!email) return "";
+  if (email.length > 254) return "Email cannot exceed 254 characters.";
+  if (/\s/.test(email) || (email.match(/@/g) || []).length !== 1) {
+    return "Enter a valid email address.";
+  }
+
+  const [local, domain] = email.split("@");
+  if (
+    !local ||
+    local.length > 64 ||
+    local.startsWith(".") ||
+    local.endsWith(".") ||
+    local.includes("..") ||
+    !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(local)
+  ) {
+    return "Enter a valid email address.";
+  }
+
+  if (!domain || domain.length > 253 || !domain.includes(".")) {
+    return "Email domain must include a valid extension.";
+  }
+
+  const labels = domain.split(".");
+  if (
+    labels.some(
+      (label) =>
+        label.length > 63 || !/^[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?$/i.test(label),
+    )
+  ) {
+    return "Enter a valid email domain.";
+  }
+
+  const tld = labels[labels.length - 1];
+  if (!/^[A-Z]{2,63}$/i.test(tld)) {
+    return "Email extension must contain at least 2 letters.";
+  }
+
+  return "";
+}
 
 const statusOptions = [
   "new",
@@ -226,13 +292,13 @@ function LeadDetails() {
     notes: "",
   });
 
+  const [fieldErrors, setFieldErrors] = useState({ phone: "", email: "" });
+
   const [loading, setLoading] = useState(true);
 
   const [saving, setSaving] = useState(false);
 
   const [error, setError] = useState("");
-
-  const [success, setSuccess] = useState("");
 
   const [counselorError, setCounselorError] = useState("");
 
@@ -516,22 +582,38 @@ function LeadDetails() {
 
     setForm((previous) => ({
       ...previous,
-
       [name]: value,
     }));
 
-    setSuccess("");
+    if (name === "phone" || name === "email") {
+      setFieldErrors((previous) => ({
+        ...previous,
+        [name]: name === "phone" ? validatePhone(value) : validateEmail(value),
+      }));
+    }
+
+    setError("");
   };
 
   const handleSave = async (event) => {
     event.preventDefault();
 
+    const nextErrors = {
+      phone: validatePhone(form.phone),
+      email: validateEmail(form.email),
+    };
+
+    setFieldErrors(nextErrors);
+
+    if (nextErrors.phone || nextErrors.email) {
+      setError("Please correct the highlighted fields before saving.");
+      return;
+    }
+
     try {
       setSaving(true);
 
       setError("");
-
-      setSuccess("");
 
       const payload = {
         name: form.name.trim(),
@@ -561,7 +643,7 @@ function LeadDetails() {
 
       await Promise.all([fetchLead(), fetchLeadActivities()]);
 
-      setSuccess("Lead details updated successfully.");
+      toast.success("Lead details updated successfully!");
     } catch (err) {
       console.error("Failed to update lead:", err);
 
@@ -641,15 +723,6 @@ function LeadDetails() {
           className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700"
         >
           {error}
-        </div>
-      )}
-
-      {success && (
-        <div
-          role="status"
-          className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700"
-        >
-          {success}
         </div>
       )}
 
@@ -747,8 +820,19 @@ function LeadDetails() {
                 onChange={handleChange}
                 required
                 maxLength={20}
-                className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-amber-500"
+                className={`w-full rounded-lg border px-4 py-3 outline-none focus:border-amber-500 ${fieldErrors.phone ? "border-red-500" : "border-gray-200"}`}
+                aria-invalid={Boolean(fieldErrors.phone)}
+                aria-describedby={fieldErrors.phone ? "phone-error" : undefined}
               />
+              {fieldErrors.phone && (
+                <p
+                  id="phone-error"
+                  className="mt-1.5 text-sm text-red-600"
+                  role="alert"
+                >
+                  {fieldErrors.phone}
+                </p>
+              )}
             </div>
 
             <div>
@@ -766,8 +850,19 @@ function LeadDetails() {
                 value={form.email}
                 onChange={handleChange}
                 maxLength={254}
-                className="w-full rounded-lg border border-gray-200 px-4 py-3 outline-none focus:border-amber-500"
+                className={`w-full rounded-lg border px-4 py-3 outline-none focus:border-amber-500 ${fieldErrors.email ? "border-red-500" : "border-gray-200"}`}
+                aria-invalid={Boolean(fieldErrors.email)}
+                aria-describedby={fieldErrors.email ? "email-error" : undefined}
               />
+              {fieldErrors.email && (
+                <p
+                  id="email-error"
+                  className="mt-1.5 text-sm text-red-600"
+                  role="alert"
+                >
+                  {fieldErrors.email}
+                </p>
+              )}
             </div>
 
             <div>
@@ -833,11 +928,13 @@ function LeadDetails() {
                 onChange={handleChange}
                 className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 outline-none focus:border-amber-500"
               >
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status.replace("-", " ")}
-                  </option>
-                ))}
+                {statusOptions
+                  .filter((status) => status !== "converted")
+                  .map((status) => (
+                    <option key={status} value={status}>
+                      {status.replace("-", " ")}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -1286,9 +1383,22 @@ function LeadDetails() {
                       <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
                         <div>
                           <h3 className="font-semibold text-gray-900">
-                            {activity.action
-                              ?.replace(/_/g, " ")
-                              .replace(/\b\w/g, (char) => char.toUpperCase()) ||
+                            {{
+                              lead_created: "Lead Created",
+                              lead_updated: "Lead Updated",
+                              status_changed: "Lead Status Changed",
+                              counselor_reassigned: "Counselor Reassigned",
+                              follow_up_added: "Follow-up Recorded",
+                              lead_converted: "Lead Converted",
+                              enrollment_approved: "Enrollment Approved",
+                              enrollment_rejected: "Enrollment Rejected",
+                              enrollment_revoked: "Enrollment Revoked",
+                            }[activity.action] ||
+                              activity.action
+                                ?.replace(/_/g, " ")
+                                .replace(/\b\w/g, (char) =>
+                                  char.toUpperCase(),
+                                ) ||
                               "Lead Activity"}
                           </h3>
 

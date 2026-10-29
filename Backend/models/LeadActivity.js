@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const leadActivitySchema = new mongoose.Schema(
@@ -25,6 +24,9 @@ const leadActivitySchema = new mongoose.Schema(
         "counselor_reassigned",
         "follow_up_added",
         "lead_converted",
+        "enrollment_approved",
+        "enrollment_rejected",
+        "enrollment_revoked",
       ],
       required: true,
     },
@@ -75,15 +77,12 @@ const leadActivitySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Efficiently retrieve a lead's activities in chronological order.
 leadActivitySchema.index({ lead: 1, createdAt: -1 });
 
-const LeadActivity = mongoose.model(
-  "LeadActivity",
-  leadActivitySchema
-);
+const LeadActivity = mongoose.model("LeadActivity", leadActivitySchema);
 
 export default LeadActivity;

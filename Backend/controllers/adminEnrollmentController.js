@@ -1,5 +1,44 @@
 import Enrollment from "../models/Enrollment.js";
 import Payment from "../models/Payment.js";
+import Lead from "../models/Lead.js";
+import LeadActivity from "../models/LeadActivity.js";
+
+const logEnrollmentActivity = async ({
+  enrollment,
+  performedBy,
+  action,
+  description,
+}) => {
+  const studentId = enrollment.studentId;
+  const courseId = enrollment.courseId;
+
+  if (!studentId || !courseId) return;
+
+  // Find the student account.
+  const student = await (await import("../models/User.js")).default
+    .findById(studentId)
+    .select("email");
+
+  if (!student?.email) return;
+
+  // Find the converted lead for this student and course.
+  const lead = await Lead.findOne({
+    email: student.email.toLowerCase(),
+    interestedCourse: courseId,
+    status: "converted",
+  });
+
+  // If no matching lead exists, do not create an unrelated activity.
+  if (!lead) return;
+
+  await LeadActivity.create({
+    lead: lead._id,
+    performedBy,
+    action,
+    description,
+  });
+};
+
 // ===============================================
 // Get All Enrollment Requests
 // ===============================================
@@ -25,7 +64,7 @@ export const getEnrollmentRequests = async (req, res) => {
           enrollment,
           payment,
         };
-      })
+      }),
     );
 
     res.status(200).json({
@@ -80,6 +119,12 @@ export const approveEnrollment = async (req, res) => {
 
     await enrollment.save();
 
+    await logEnrollmentActivity({
+      enrollment,
+      performedBy: req.user._id,
+      action: "enrollment_approved",
+      description: "Student enrollment was approved.",
+    });
     res.status(200).json({
       success: true,
       message: "Enrollment approved successfully.",
@@ -130,10 +175,21 @@ export const rejectEnrollment = async (req, res) => {
     }
 
     enrollment.status = "rejected";
-    enrollment.approvedBy = req.user._id;
-    enrollment.approvedAt = new Date();
+    enrollment.rejectedBy = req.user._id;
+    enrollment.rejectedAt = new Date();
+
+    // Clear approval information
+    enrollment.approvedBy = undefined;
+    enrollment.approvedAt = undefined;
 
     await enrollment.save();
+
+    await logEnrollmentActivity({
+      enrollment,
+      performedBy: req.user._id,
+      action: "enrollment_rejected",
+      description: "Student enrollment was rejected.",
+    });
 
     res.status(200).json({
       success: true,
@@ -167,8 +223,7 @@ export const revokeEnrollment = async (req, res) => {
     if (enrollment.status !== "approved") {
       return res.status(400).json({
         success: false,
-        message:
-          "Only approved enrollments can be removed from a course.",
+        message: "Only approved enrollments can be removed from a course.",
       });
     }
 
@@ -177,6 +232,13 @@ export const revokeEnrollment = async (req, res) => {
     enrollment.revokedBy = req.user._id;
 
     await enrollment.save();
+
+    await logEnrollmentActivity({
+      enrollment,
+      performedBy: req.user._id,
+      action: "enrollment_revoked",
+      description: "Student was removed from the course.",
+    });
 
     res.status(200).json({
       success: true,
