@@ -2,6 +2,8 @@ import Enrollment from "../models/Enrollment.js";
 import Payment from "../models/Payment.js";
 import Lead from "../models/Lead.js";
 import LeadActivity from "../models/LeadActivity.js";
+import User from "../models/User.js";
+
 
 const logEnrollmentActivity = async ({
   enrollment,
@@ -9,35 +11,38 @@ const logEnrollmentActivity = async ({
   action,
   description,
 }) => {
-  const studentId = enrollment.studentId;
-  const courseId = enrollment.courseId;
+  try {
+    const studentId = enrollment.studentId;
+    const courseId = enrollment.courseId;
 
-  if (!studentId || !courseId) return;
+    if (!studentId || !courseId) return;
 
-  // Find the student account.
-  const student = await (await import("../models/User.js")).default
-    .findById(studentId)
-    .select("email");
+    const student = await User.findById(studentId).select("email");
 
-  if (!student?.email) return;
+    if (!student?.email) return;
 
-  // Find the converted lead for this student and course.
-  const lead = await Lead.findOne({
-    email: student.email.toLowerCase(),
-    interestedCourse: courseId,
-    status: "converted",
-  });
+    const lead = await Lead.findOne({
+      email: student.email.trim().toLowerCase(),
+      interestedCourse: courseId,
+      status: "converted",
+    });
 
-  // If no matching lead exists, do not create an unrelated activity.
-  if (!lead) return;
+    if (!lead) return;
 
-  await LeadActivity.create({
-    lead: lead._id,
-    performedBy,
-    action,
-    description,
-  });
+    await LeadActivity.create({
+      lead: lead._id,
+      performedBy,
+      action,
+      description,
+    });
+  } catch (error) {
+    // Enrollment has already been updated.
+    // Do not report the enrollment action as failed just because
+    // timeline logging encountered an error.
+    console.error("Enrollment activity logging error:", error);
+  }
 };
+
 
 // ===============================================
 // Get All Enrollment Requests

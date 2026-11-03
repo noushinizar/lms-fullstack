@@ -772,7 +772,21 @@ function LeadDetails() {
 
       {/* Editable lead form */}
 
-      <form onSubmit={handleSave} className="space-y-6">
+      <form
+        onSubmit={handleSave}
+        className={`space-y-6 ${
+          lead.status === "converted" ? "opacity-75" : ""
+        }`}
+      >
+        {lead.status === "converted" && (
+          <div
+            role="status"
+            className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800"
+          >
+            This lead has been converted to a student. Its enquiry details are
+            now read-only.
+          </div>
+        )}
         <section className="rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-6 py-5">
             <h2 className="text-lg font-bold text-gray-900">

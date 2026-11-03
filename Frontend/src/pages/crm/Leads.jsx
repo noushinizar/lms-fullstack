@@ -1149,10 +1149,18 @@ function Leads() {
               .
             </p>
 
-            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-              The student enrollment will remain pending until an admin approves
-              it. Make sure the email and course are correct.
-            </p>
+            <div className="mt-3 space-y-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              <p>
+                <strong>Student email:</strong>{" "}
+                {confirmConvert.email || "No email provided"}
+              </p>
+
+              <p>
+                The student enrollment will remain pending until an admin
+                approves it. Please verify the email and course before
+                continuing.
+              </p>
+            </div>
 
             <div className="mt-6 flex justify-end gap-3">
               <button
