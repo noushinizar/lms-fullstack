@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -15,13 +16,28 @@ const router = express.Router();
 // ================= Student =================
 
 // Request Enrollment
-router.post("/", protect, enrollCourse);
+router.post(
+  "/",
+  protect,
+  authorizeRoles("student"),
+  enrollCourse
+);
 
 // Approved Courses
-router.get("/mycourses", protect, getMyCourses);
+router.get(
+  "/mycourses",
+  protect,
+  authorizeRoles("student"),
+  getMyCourses
+);
 
-// All Enrollment Requests (Pending/Approved/Rejected)
-router.get("/myrequests", protect, getMyEnrollmentRequests);
+// All Enrollment Requests
+router.get(
+  "/myrequests",
+  protect,
+  authorizeRoles("student"),
+  getMyEnrollmentRequests
+);
 
 // ================= Mentor/Admin =================
 

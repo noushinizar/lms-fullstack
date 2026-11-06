@@ -1,28 +1,35 @@
 import api from "./api";
 
-export const registerUser = async (userData) => {
+// ======================================================
+// REGISTER USER
+// ======================================================
 
-  const response =
-    await api.post(
-      "/auth/register",
-      userData
-    );
+export const registerUser = async (userData) => {
+  const response = await api.post(
+    "/auth/register",
+    userData
+  );
 
   return response.data;
 };
+
+// ======================================================
+// LOGIN USER
+// ======================================================
 
 export const loginUser = async (userData) => {
-
-  const response =
-    await api.post(
-      "/auth/login",
-      userData
-    );
+  const response = await api.post(
+    "/auth/login",
+    userData
+  );
 
   return response.data;
 };
 
-// Forgot Password
+// ======================================================
+// FORGOT PASSWORD - SEND OTP
+// ======================================================
+
 export const forgotPassword = async (email) => {
   const response = await api.post(
     "/auth/forgot-password",
@@ -32,19 +39,56 @@ export const forgotPassword = async (email) => {
   return response.data;
 };
 
-// Reset Password
-export const resetPassword = async (token, password) => {
+// ======================================================
+// VERIFY RESET OTP
+// ======================================================
+
+export const verifyResetOtp = async (email, otp) => {
   const response = await api.post(
-    `/auth/reset-password/${token}`,
-    { password }
+    "/auth/verify-reset-otp",
+    {
+      email,
+      otp,
+    }
   );
 
   return response.data;
 };
 
+// ======================================================
+// RESET PASSWORD
+// ======================================================
 
-// Get all mentors
+export const resetPassword = async (resetToken, password) => {
+  const response = await api.post(
+    "/auth/reset-password",
+    {
+      resetToken,
+      password,
+    }
+  );
+
+  return response.data;
+};
+// ======================================================
+// ACCOUNT ACTIVATION
+// ======================================================
+
+export const activateAccount = async (token, password) => {
+  const response = await api.post("/auth/activate-account", {
+    token,
+    password,
+  });
+
+  return response.data;
+};
+
+// ======================================================
+// GET MENTORS
+// ======================================================
+
 export const getMentors = async () => {
   const response = await api.get("/auth/mentors");
+
   return response.data;
 };

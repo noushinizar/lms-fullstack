@@ -62,6 +62,8 @@ import CrmDashboard from "../pages/crm/Dashboard";
 import Leads from "../pages/crm/Leads";
 import LeadDetails from "../pages/crm/LeadDetails";
 import CounselorWorkload from "../pages/crm/CounselorWorkload";
+import VerifyResetOtp from "../pages/auth/VerifyResetOtp";
+import ActivateAccount from "../pages/auth/ActivateAccount";
 
 /* =========================================================
    GET LOGGED-IN USER
@@ -161,7 +163,12 @@ function AppRoutes() {
         />
 
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password/:token" element={<ResetPassword />} />
+
+        <Route path="/verify-reset-otp" element={<VerifyResetOtp />} />
+
+        <Route path="/reset-password" element={<ResetPassword />} />
+
+        <Route path="/activate-account" element={<ActivateAccount />} />
 
         {/* STUDENT */}
         <Route

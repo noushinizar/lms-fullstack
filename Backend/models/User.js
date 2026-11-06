@@ -63,6 +63,17 @@ const userSchema = new mongoose.Schema(
     },
 
     // ================================
+    // ACCOUNT ACTIVATION
+    // ================================
+
+    accountActivationToken: {
+      type: String,
+    },
+
+    accountActivationTokenExpire: {
+      type: Date,
+    },
+    // ================================
     // PROFILE
     // ================================
 

@@ -2,28 +2,41 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
 const protect = async (req, res, next) => {
-  let token;
+  const authHeader = req.headers.authorization;
 
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      message: "Not authorized. Please log in.",
+    });
+  }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  try {
+    const token = authHeader.split(" ")[1];
 
-      req.user = await User.findById(decoded.id).select("-password");
-
-      next();
-    } catch (error) {
+    if (!token) {
       return res.status(401).json({
-        message: "Not authorized",
+        message: "Authentication token is missing.",
       });
     }
-  } else {
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({
+        message: "User account not found. Please log in again.",
+      });
+    }
+
+    req.user = user;
+
+    return next();
+  } catch (error) {
+    console.error("Authentication error:", error.message);
+
     return res.status(401).json({
-      message: "No token found",
+      message: "Invalid or expired authentication token.",
     });
   }
 };

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { resetPassword } from "../../services/authService";
 import {
   FaLock,
@@ -19,42 +19,39 @@ function ResetPassword() {
   const { token } = useParams();
   const navigate = useNavigate();
 
+  const location = useLocation();
+
+  const resetToken = location.state?.resetToken;
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] =
-    useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  if (password !== confirmPassword) {
-    return showWarning("Passwords do not match");
-  }
+    if (password !== confirmPassword) {
+      return showWarning("Passwords do not match");
+    }
 
-  try {
+    try {
+      const data = await resetPassword(resetToken, password);
 
-    const data = await resetPassword(
-      token,
-      password
-    );
+      showSuccess(data.message);
 
-    showSuccess(data.message);
+      navigate("/login");
+    } catch (error) {
+      console.log(error);
 
-    navigate("/login");
-
-  } catch (error) {
-  console.log(error);
-  
-
-  showError(
-    error.response?.data?.message ||
-    error.message ||
-    "Password reset failed"
-  );
-}
-};
+      showError(
+        error.response?.data?.message ||
+          error.message ||
+          "Password reset failed",
+      );
+    }
+  };
 
   const getStrength = () => {
     if (password.length < 6) return "Weak";
@@ -70,13 +67,10 @@ function ResetPassword() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-amber-200 via-orange-100 to-yellow-100 flex items-center justify-center px-6 py-10">
-
       <div className="max-w-7xl w-full grid lg:grid-cols-2 gap-12 items-center">
-
         {/* Left Side */}
 
         <div className="hidden lg:block">
-
           <img
             src={illustration}
             alt="Reset Password"
@@ -110,13 +104,11 @@ function ResetPassword() {
             </div>
 
           </div> */}
-
         </div>
 
         {/* Right Side */}
 
         <div className="bg-[#f9dcb5] rounded-[40px] p-10 shadow-[20px_20px_60px_#d6bb92,-20px_-20px_60px_#fff6e8]">
-
           <h2 className="text-4xl font-bold text-center text-gray-800">
             Reset Password
           </h2>
@@ -126,11 +118,9 @@ function ResetPassword() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-
             {/* Password */}
 
             <div className="flex items-center rounded-2xl px-5 py-4 bg-[#f9ead6] shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]">
-
               <FaLock className="text-amber-600 mr-4" />
 
               <input
@@ -152,7 +142,6 @@ function ResetPassword() {
                   <FaEye className="text-gray-600" />
                 )}
               </button>
-
             </div>
 
             {/* Password Strength */}
@@ -166,25 +155,20 @@ function ResetPassword() {
             {/* Confirm Password */}
 
             <div className="flex items-center rounded-2xl px-5 py-4 bg-[#f9ead6] shadow-[inset_6px_6px_12px_#d8bc92,inset_-6px_-6px_12px_#fff7e9]">
-
               <FaLock className="text-amber-600 mr-4" />
 
               <input
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm Password"
                 value={confirmPassword}
-                onChange={(e) =>
-                  setConfirmPassword(e.target.value)
-                }
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full bg-transparent outline-none"
                 required
               />
 
               <button
                 type="button"
-                onClick={() =>
-                  setShowConfirmPassword(!showConfirmPassword)
-                }
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               >
                 {showConfirmPassword ? (
                   <FaEyeSlash className="text-gray-600" />
@@ -192,7 +176,6 @@ function ResetPassword() {
                   <FaEye className="text-gray-600" />
                 )}
               </button>
-
             </div>
 
             <button
@@ -202,11 +185,9 @@ function ResetPassword() {
               Reset Password
               <FaArrowRight />
             </button>
-
           </form>
 
           <div className="mt-8 text-center">
-
             <Link
               to="/login"
               className="inline-flex items-center gap-2 text-amber-700 font-semibold hover:underline"
@@ -214,13 +195,9 @@ function ResetPassword() {
               <FaArrowLeft />
               Back to Login
             </Link>
-
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }

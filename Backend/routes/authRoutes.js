@@ -8,6 +8,7 @@ import {
   forgotPassword,
   verifyResetOtp,
   resetPassword,
+  activateAccount,
 } from "../controllers/authController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -34,6 +35,13 @@ router.post("/verify-reset-otp", verifyResetOtp);
 
 // Step 3: Reset password using temporary reset token
 router.post("/reset-password", resetPassword);
+
+// ======================================================
+// ACCOUNT ACTIVATION
+// ======================================================
+
+// Activate a newly created student account and set password
+router.post("/activate-account", activateAccount);
 
 // ======================================================
 // PROTECTED ROUTES

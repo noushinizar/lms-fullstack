@@ -8,6 +8,7 @@ import ExcelJS from "exceljs";
 import { Readable } from "node:stream";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
+import sendEmail from "../config/mail.js";
 import Enrollment from "../models/Enrollment.js";
 // ============================================================
 // CONSTANTS
@@ -57,7 +58,6 @@ const normalizeEmail = (value) =>
 
 const normalizePhone = (value) => String(value ?? "").replace(/\D/g, "");
 
-
 const findDuplicateLead = async ({ phone, email, excludeLeadId }) => {
   const normalizedPhone = normalizePhone(phone);
   const normalizedEmail = normalizeEmail(email);
@@ -74,25 +74,20 @@ const findDuplicateLead = async ({ phone, email, excludeLeadId }) => {
 
   if (
     normalizedPhone &&
-    existingLeads.some(
-      (lead) => normalizePhone(lead.phone) === normalizedPhone,
-    )
+    existingLeads.some((lead) => normalizePhone(lead.phone) === normalizedPhone)
   ) {
     duplicates.push({ field: "phone" });
   }
 
   if (
     normalizedEmail &&
-    existingLeads.some(
-      (lead) => normalizeEmail(lead.email) === normalizedEmail,
-    )
+    existingLeads.some((lead) => normalizeEmail(lead.email) === normalizedEmail)
   ) {
     duplicates.push({ field: "email" });
   }
 
   return duplicates;
 };
-
 
 // Phone numbers may contain a leading + and common visual separators,
 // but must contain 7–15 digits and cannot contain letters or other symbols.
@@ -139,7 +134,11 @@ const validateEmail = (value) => {
   }
 
   // Disallow consecutive dots and dots at either end of the local part.
-  if (localPart.startsWith(".") || localPart.endsWith(".") || localPart.includes("..")) {
+  if (
+    localPart.startsWith(".") ||
+    localPart.endsWith(".") ||
+    localPart.includes("..")
+  ) {
     return false;
   }
 
@@ -298,7 +297,6 @@ const validateCounselor = async (counselorId) => {
 // CREATE LEAD
 // ============================================================
 
-
 export const createLead = async (req, res) => {
   try {
     const {
@@ -337,6 +335,13 @@ export const createLead = async (req, res) => {
 
     if (source !== undefined && !leadSources.includes(source)) {
       return res.status(400).json({ message: "Invalid lead source." });
+    }
+
+    if (status === "converted") {
+      return res.status(400).json({
+        message:
+          'A lead cannot be created with "converted" status. Use the lead conversion action instead.',
+      });
     }
 
     if (status !== undefined && !leadStatuses.includes(status)) {
@@ -442,7 +447,6 @@ export const createLead = async (req, res) => {
   }
 };
 
-
 // ============================================================
 // GET AND FILTER LEADS
 // ============================================================
@@ -547,9 +551,6 @@ export const getLeadById = async (req, res) => {
 // ============================================================
 // UPDATE LEAD
 // ============================================================
-
-
-
 
 export const updateLead = async (req, res) => {
   let session;
@@ -872,13 +873,13 @@ export const updateLead = async (req, res) => {
   }
 };
 
-
-
 // ============================================================
 // DELETE LEAD — ADMIN ONLY
 // ============================================================
 
 export const deleteLead = async (req, res) => {
+  let session;
+
   try {
     if (!isAdmin(req)) {
       return res.status(403).json({
@@ -890,21 +891,55 @@ export const deleteLead = async (req, res) => {
       return res.status(400).json({ message: "Invalid lead ID." });
     }
 
-    const lead = await Lead.findById(req.params.id);
+    session = await Lead.db.startSession();
 
-    if (!lead) {
-      return res.status(404).json({ message: "Lead not found." });
+    let leadNotFound = false;
+
+    await session.withTransaction(async () => {
+      leadNotFound = false;
+
+      const lead = await Lead.findById(req.params.id).session(session);
+
+      if (!lead) {
+        leadNotFound = true;
+        return;
+      }
+
+      // Delete all follow-ups belonging to this lead.
+      await FollowUp.deleteMany({
+        lead: lead._id,
+      }).session(session);
+
+      // Delete all activity records belonging to this lead.
+      await LeadActivity.deleteMany({
+        lead: lead._id,
+      }).session(session);
+
+      // Finally, delete the lead itself.
+      await Lead.deleteOne({
+        _id: lead._id,
+      }).session(session);
+    });
+
+    if (leadNotFound) {
+      return res.status(404).json({
+        message: "Lead not found.",
+      });
     }
 
-    await lead.deleteOne();
-
     return res.status(200).json({
-      message: "Lead deleted successfully.",
+      message: "Lead and related records deleted successfully.",
     });
   } catch (error) {
     console.error("Delete lead error:", error);
 
-    return res.status(500).json({ message: "Unable to delete lead." });
+    return res.status(500).json({
+      message: "Unable to delete lead.",
+    });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
 
@@ -1562,6 +1597,12 @@ export const importLeads = async (req, res) => {
           throw new Error(`Invalid source: ${sourceInput}`);
         }
 
+        if (statusInput === "converted") {
+          throw new Error(
+            'Leads cannot be imported with "converted" status. Use the lead conversion action instead.',
+          );
+        }
+
         if (!validStatuses.includes(statusInput)) {
           throw new Error(`Invalid status: ${statusInput}`);
         }
@@ -1710,9 +1751,13 @@ export const importLeads = async (req, res) => {
 export const convertLeadToStudent = async (req, res) => {
   const session = await mongoose.startSession();
 
+  let activationToken = null;
+
   try {
     if (!isValidId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid lead ID." });
+      return res.status(400).json({
+        message: "Invalid lead ID.",
+      });
     }
 
     let result = null;
@@ -1779,6 +1824,7 @@ export const convertLeadToStudent = async (req, res) => {
 
       // Reuse an existing account only if it is a student.
       let student = await User.findOne({ email }).session(session);
+
       let accountCreated = false;
 
       if (student && student.role !== "student") {
@@ -1789,10 +1835,20 @@ export const convertLeadToStudent = async (req, res) => {
         throw error;
       }
 
+      // Create a new student account.
       if (!student) {
-        // Generate an unpredictable initial password.
-        // Never return it to the counselor or expose it in the response.
+        // Generate secure activation token.
+        activationToken = crypto.randomBytes(32).toString("hex");
+
+        // Store only the token hash in MongoDB.
+        const hashedActivationToken = crypto
+          .createHash("sha256")
+          .update(activationToken)
+          .digest("hex");
+
+        // Generate an unpredictable temporary password.
         const temporaryPassword = crypto.randomBytes(32).toString("hex");
+
         const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
         const [createdStudent] = await User.create(
@@ -1803,6 +1859,12 @@ export const convertLeadToStudent = async (req, res) => {
               phone: lead.phone,
               password: hashedPassword,
               role: "student",
+
+              accountActivationToken: hashedActivationToken,
+
+              accountActivationTokenExpire: new Date(
+                Date.now() + 24 * 60 * 60 * 1000,
+              ),
             },
           ],
           { session },
@@ -1812,6 +1874,7 @@ export const convertLeadToStudent = async (req, res) => {
         accountCreated = true;
       }
 
+      // Check existing enrollment.
       let enrollment = await Enrollment.findOne({
         studentId: student._id,
         courseId: course._id,
@@ -1840,10 +1903,14 @@ export const convertLeadToStudent = async (req, res) => {
         enrollment = createdEnrollment;
       }
 
+      // Update lead status.
       const previousStatus = lead.status;
+
       lead.status = "converted";
+
       await lead.save({ session });
 
+      // Record CRM activity.
       await logLeadActivity({
         leadId: lead._id,
         userId: req.user._id,
@@ -1871,11 +1938,133 @@ export const convertLeadToStudent = async (req, res) => {
       };
     });
 
+    // ==========================================
+    // SEND ACTIVATION EMAIL AFTER TRANSACTION
+    // ==========================================
+
+    let activationEmailSent = false;
+
+    if (result.accountCreated && activationToken) {
+      const frontendUrl = (
+        process.env.CLIENT_URL || "http://localhost:5173"
+      ).replace(/\/+$/, "");
+
+      const activationLink = `${frontendUrl}/activate-account?token=${encodeURIComponent(activationToken)}`;
+
+      // Escape student name before inserting into HTML.
+      const safeName = String(result.studentName || "Student").replace(
+        /[&<>"']/g,
+        (char) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[char],
+      );
+
+      try {
+        const emailResult = await sendEmail({
+          to: result.studentEmail,
+
+          subject: "Welcome to Astrobyte - Activate Your Student Account",
+
+          html: `
+            <div style="
+              font-family: Arial, sans-serif;
+              max-width: 600px;
+              margin: 20px auto;
+              padding: 30px;
+              background: #f8fafc;
+              border-radius: 10px;
+            ">
+
+              <h2 style="color: #202A3A;">
+                Welcome to Astrobyte!
+              </h2>
+
+              <p>Hello ${safeName},</p>
+
+              <p>
+                Your student account has been created successfully.
+                Please activate your account and create your password
+                using the button below.
+              </p>
+
+              <div style="text-align: center; margin: 30px 0;">
+                <a
+                  href="${activationLink}"
+                  style="
+                    display: inline-block;
+                    padding: 14px 28px;
+                    background: #2563eb;
+                    color: #ffffff;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: bold;
+                  "
+                >
+                  Activate My Account
+                </a>
+              </div>
+
+              <p>
+                This activation link expires in
+                <strong>24 hours</strong>.
+              </p>
+
+              <p>
+                If you weren't expecting this email,
+                please contact Astrobyte support.
+              </p>
+
+              <hr style="
+                border: none;
+                border-top: 1px solid #e5e7eb;
+                margin: 25px 0;
+              " />
+
+              <p style="
+                color: #6b7280;
+                font-size: 13px;
+                text-align: center;
+              ">
+                © ${new Date().getFullYear()} Astrobyte
+              </p>
+
+            </div>
+          `,
+        });
+
+        activationEmailSent = true;
+
+        console.log(
+          "STUDENT ACTIVATION EMAIL SENT:",
+          emailResult?.messageId || "",
+        );
+      } catch (emailError) {
+        // Conversion has already committed.
+        // Do not roll back the student or enrollment.
+        console.error("STUDENT ACTIVATION EMAIL ERROR:", emailError);
+      }
+    }
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
     return res.status(200).json({
       message: result.accountCreated
-        ? "Lead converted. Student account created and enrollment submitted for approval."
+        ? activationEmailSent
+          ? "Lead converted. Student account created and activation email sent."
+          : "Lead converted successfully, but activation email could not be sent."
         : "Lead converted. Existing student account linked and enrollment checked.",
-      conversion: result,
+
+      conversion: {
+        ...result,
+        activationEmailSent,
+      },
     });
   } catch (error) {
     if (error.statusCode) {
@@ -1902,8 +2091,6 @@ export const convertLeadToStudent = async (req, res) => {
   }
 };
 
-
-
 export const getCounselorWorkload = async (req, res) => {
   try {
     const admin = isAdmin(req);
@@ -1926,34 +2113,29 @@ export const getCounselorWorkload = async (req, res) => {
     const { start, end, previousStart, previousEnd } = range;
     const now = new Date();
 
-    const dayStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    );
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const tomorrow = new Date(dayStart);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const leadScope = getReportLeadScope(req);
 
-    const activeStatuses = [
-      "new",
-      "contacted",
-      "interested",
-      "follow-up",
-    ];
+    const activeStatuses = ["new", "contacted", "interested", "follow-up"];
 
-    const [counselors, workload, unassignedLeads, periodLeads,
-      previousLeads, accessibleLeads] = await Promise.all([
+    const [
+      counselors,
+      workload,
+      unassignedLeads,
+      periodLeads,
+      previousLeads,
+      accessibleLeads,
+    ] = await Promise.all([
       admin
         ? User.find({ role: "admission_counselor" })
             .select("_id name email")
             .sort({ name: 1 })
             .lean()
-        : User.find({ _id: req.user._id })
-            .select("_id name email")
-            .lean(),
+        : User.find({ _id: req.user._id }).select("_id name email").lean(),
 
       // Current workload: preserve the existing status and follow-up fields.
       Lead.aggregate([
@@ -2078,13 +2260,10 @@ export const getCounselorWorkload = async (req, res) => {
         { $group: { _id: "$lead", eventCount: { $sum: 1 } } },
       ];
 
-      [conversionEvents, previousConversionEvents] =
-        await Promise.all([
-          LeadActivity.aggregate(conversionPipeline(start, end)),
-          LeadActivity.aggregate(
-            conversionPipeline(previousStart, previousEnd),
-          ),
-        ]);
+      [conversionEvents, previousConversionEvents] = await Promise.all([
+        LeadActivity.aggregate(conversionPipeline(start, end)),
+        LeadActivity.aggregate(conversionPipeline(previousStart, previousEnd)),
+      ]);
     }
 
     const leadsCreated = periodLeads.length;
@@ -2095,11 +2274,10 @@ export const getCounselorWorkload = async (req, res) => {
       0,
     );
 
-    const previousConversionsInPeriod =
-      previousConversionEvents.reduce(
-        (sum, item) => sum + item.eventCount,
-        0,
-      );
+    const previousConversionsInPeriod = previousConversionEvents.reduce(
+      (sum, item) => sum + item.eventCount,
+      0,
+    );
 
     const conversionRate = leadsCreated
       ? Math.round((conversionsInPeriod / leadsCreated) * 10000) / 100
@@ -2112,9 +2290,7 @@ export const getCounselorWorkload = async (req, res) => {
       : 0;
 
     const counselorStats = counselors.map((counselor) => {
-      const stats = workloadByCounselor.get(
-        String(counselor._id),
-      );
+      const stats = workloadByCounselor.get(String(counselor._id));
 
       const total = stats?.total || 0;
       const converted = stats?.converted || 0;
@@ -2172,9 +2348,7 @@ export const getCounselorWorkload = async (req, res) => {
       .map((item) => ({
         ...item,
         conversionRate: item.totalLeads
-          ? Math.round(
-              (item.convertedLeads / item.totalLeads) * 10000,
-            ) / 100
+          ? Math.round((item.convertedLeads / item.totalLeads) * 10000) / 100
           : 0,
       }))
       .sort((a, b) => b.totalLeads - a.totalLeads);
@@ -2259,7 +2433,6 @@ export const getCounselorWorkload = async (req, res) => {
   }
 };
 
-
 // ============================================================
 // CRM REPORTS — DATE AND ACCESS HELPERS
 // ============================================================
@@ -2280,10 +2453,7 @@ const getReportDateRange = (req) => {
     start = new Date(startDate);
     end = new Date(endDate);
 
-    if (
-      Number.isNaN(start.getTime()) ||
-      Number.isNaN(end.getTime())
-    ) {
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       return { error: "Invalid report date range." };
     }
 
@@ -2301,13 +2471,9 @@ const getReportDateRange = (req) => {
     // Default range: the current calendar month in UTC.
     const now = new Date();
 
-    start = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-    );
+    start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-    end = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-    );
+    end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   }
 
   const duration = end.getTime() - start.getTime();
@@ -2342,21 +2508,11 @@ export const getLeadReportOverview = async (req, res) => {
       });
     }
 
-    const {
-      start,
-      end,
-      previousStart,
-      previousEnd,
-    } = range;
+    const { start, end, previousStart, previousEnd } = range;
 
     const leadScope = getReportLeadScope(req);
 
-    const activeStatuses = [
-      "new",
-      "contacted",
-      "interested",
-      "follow-up",
-    ];
+    const activeStatuses = ["new", "contacted", "interested", "follow-up"];
 
     // Leads created during the selected period.
     const leadsCreated = await Lead.countDocuments({
@@ -2377,13 +2533,9 @@ export const getLeadReportOverview = async (req, res) => {
     });
 
     // Restrict conversion activities to leads this user can access.
-    const accessibleLeads = await Lead.find(leadScope)
-      .select("_id")
-      .lean();
+    const accessibleLeads = await Lead.find(leadScope).select("_id").lean();
 
-    const accessibleLeadIds = accessibleLeads.map(
-      (lead) => lead._id,
-    );
+    const accessibleLeadIds = accessibleLeads.map((lead) => lead._id);
 
     let leadsConverted = 0;
     let previousLeadsConverted = 0;
@@ -2436,8 +2588,7 @@ export const getLeadReportOverview = async (req, res) => {
       ]);
 
       leadsConverted = conversionCounts[0]?.currentPeriod || 0;
-      previousLeadsConverted =
-        conversionCounts[0]?.previousPeriod || 0;
+      previousLeadsConverted = conversionCounts[0]?.previousPeriod || 0;
     }
 
     // Current status distribution for accessible leads.
@@ -2469,33 +2620,24 @@ export const getLeadReportOverview = async (req, res) => {
     // Follow-up metrics use the accessible leads' followUpDate.
     const now = new Date();
 
-    const [overdueFollowUps, followUpsDueToday] =
-      await Promise.all([
-        Lead.countDocuments({
-          ...leadScope,
-          status: { $in: activeStatuses },
-          followUpDate: {
-            $ne: null,
-            $lt: now,
-          },
-        }),
-        Lead.countDocuments({
-          ...leadScope,
-          status: { $in: activeStatuses },
-          followUpDate: {
-            $gte: new Date(
-              now.getFullYear(),
-              now.getMonth(),
-              now.getDate(),
-            ),
-            $lt: new Date(
-              now.getFullYear(),
-              now.getMonth(),
-              now.getDate() + 1,
-            ),
-          },
-        }),
-      ]);
+    const [overdueFollowUps, followUpsDueToday] = await Promise.all([
+      Lead.countDocuments({
+        ...leadScope,
+        status: { $in: activeStatuses },
+        followUpDate: {
+          $ne: null,
+          $lt: now,
+        },
+      }),
+      Lead.countDocuments({
+        ...leadScope,
+        status: { $in: activeStatuses },
+        followUpDate: {
+          $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+          $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
+        },
+      }),
+    ]);
 
     const conversionRate =
       leadsCreated > 0
@@ -2504,9 +2646,8 @@ export const getLeadReportOverview = async (req, res) => {
 
     const previousConversionRate =
       previousLeadsCreated > 0
-        ? Math.round(
-            (previousLeadsConverted / previousLeadsCreated) * 10000,
-          ) / 100
+        ? Math.round((previousLeadsConverted / previousLeadsCreated) * 10000) /
+          100
         : 0;
 
     return res.status(200).json({
@@ -2524,9 +2665,7 @@ export const getLeadReportOverview = async (req, res) => {
         conversionRate,
         previousConversionRate,
         conversionRateChange:
-          Math.round(
-            (conversionRate - previousConversionRate) * 100,
-          ) / 100,
+          Math.round((conversionRate - previousConversionRate) * 100) / 100,
         followUpsDueToday,
         overdueFollowUps,
       },
@@ -2576,20 +2715,12 @@ export const getLeadSourceReport = async (req, res) => {
           totalLeads: { $sum: 1 },
           convertedLeads: {
             $sum: {
-              $cond: [
-                { $eq: ["$status", "converted"] },
-                1,
-                0,
-              ],
+              $cond: [{ $eq: ["$status", "converted"] }, 1, 0],
             },
           },
           lostLeads: {
             $sum: {
-              $cond: [
-                { $eq: ["$status", "lost"] },
-                1,
-                0,
-              ],
+              $cond: [{ $eq: ["$status", "lost"] }, 1, 0],
             },
           },
         },
@@ -2609,9 +2740,7 @@ export const getLeadSourceReport = async (req, res) => {
       lostLeads: item.lostLeads,
       conversionRate:
         item.totalLeads > 0
-          ? Math.round(
-              (item.convertedLeads / item.totalLeads) * 10000,
-            ) / 100
+          ? Math.round((item.convertedLeads / item.totalLeads) * 10000) / 100
           : 0,
     }));
 
@@ -2620,10 +2749,7 @@ export const getLeadSourceReport = async (req, res) => {
         startDate: start.toISOString(),
         endDateExclusive: end.toISOString(),
       },
-      totalLeads: reports.reduce(
-        (sum, item) => sum + item.totalLeads,
-        0,
-      ),
+      totalLeads: reports.reduce((sum, item) => sum + item.totalLeads, 0),
       sources: reports,
     });
   } catch (error) {
