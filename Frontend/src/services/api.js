@@ -24,8 +24,23 @@ api.interceptors.response.use(
   (response) => response,
 
   (error) => {
-    if (error.response?.status === 401) {
+    const requestUrl = error.config?.url || "";
 
+    // Authentication endpoints where 401 can be expected
+    const publicAuthEndpoints = [
+      "/auth/register",
+      "/auth/login",
+      "/auth/forgot-password",
+      "/auth/verify-reset-otp",
+      "/auth/reset-password",
+      "/auth/activate-account",
+    ];
+
+    const isPublicAuthRequest = publicAuthEndpoints.some((endpoint) =>
+      requestUrl.split("?")[0].endsWith(endpoint)
+    );
+
+    if (error.response?.status === 401 && !isPublicAuthRequest) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
 

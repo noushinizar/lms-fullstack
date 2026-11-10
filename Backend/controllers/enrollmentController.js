@@ -2,6 +2,7 @@ import Enrollment from "../models/Enrollment.js";
 import Course from "../models/Course.js";
 import Lesson from "../models/Lesson.js";
 import Progress from "../models/Progress.js";
+import mongoose from "mongoose";
 
 // =====================================================
 // Student - Request Enrollment
@@ -12,15 +13,23 @@ export const enrollCourse = async (req, res) => {
     const studentId = req.user._id;
     const { courseId } = req.body;
 
-    if (!courseId) {
-      return res.status(400).json({
-        success: false,
-        message: "Course ID is required.",
-      });
-    }
+   if (!courseId) {
+  return res.status(400).json({
+    success: false,
+    message: "Course ID is required.",
+  });
+}
 
-    // Check course exists
-    const course = await Course.findById(courseId);
+// Validate course ID before querying MongoDB
+if (!mongoose.isValidObjectId(courseId)) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid course ID.",
+  });
+}
+
+// Check course exists
+const course = await Course.findById(courseId);
 
     if (!course) {
       return res.status(404).json({
@@ -89,6 +98,10 @@ export const enrollCourse = async (req, res) => {
       existingEnrollment.approvedAt = undefined;
       existingEnrollment.approvedBy = undefined;
 
+      // Clear previous rejection information
+      existingEnrollment.rejectedAt = undefined;
+      existingEnrollment.rejectedBy = undefined;
+
       // Clear previous revoke information
       existingEnrollment.revokedAt = undefined;
       existingEnrollment.revokedBy = undefined;
@@ -111,9 +124,20 @@ export const enrollCourse = async (req, res) => {
       message: "Unable to submit enrollment request.",
     });
   } catch (error) {
-    res.status(500).json({
+    // Handle duplicate enrollment requests
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "You have already submitted an enrollment request for this course.",
+      });
+    }
+
+    console.error("Enroll course error:", error);
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Unable to submit enrollment request. Please try again.",
     });
   }
 };
@@ -163,9 +187,40 @@ export const getMyEnrollmentRequests = async (req, res) => {
 // Mentor - Get Students of Course
 // @route GET /api/enrollment/course/:courseId/students
 // =====================================================
+
 export const getCourseStudents = async (req, res) => {
   try {
     const { courseId } = req.params;
+
+    // Validate course ID
+    if (!mongoose.isValidObjectId(courseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID.",
+      });
+    }
+
+    // Check whether course exists
+    const course = await Course.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found.",
+      });
+    }
+
+    // Mentors can only view students in their own courses.
+    // Admins can view students in any course.
+    if (
+      req.user.role === "mentor" &&
+      String(course.mentor) !== String(req.user._id)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view students for this course.",
+      });
+    }
 
     // Only approved students
     const enrollments = await Enrollment.find({
@@ -175,6 +230,10 @@ export const getCourseStudents = async (req, res) => {
       .populate("studentId", "name email phone")
       .sort({ createdAt: -1 });
 
+    const totalLessons = await Lesson.countDocuments({
+      courseId,
+    });
+
     const students = await Promise.all(
       enrollments.map(async (enrollment) => {
         const progress = await Progress.findOne({
@@ -182,12 +241,7 @@ export const getCourseStudents = async (req, res) => {
           courseId,
         });
 
-        const totalLessons = await Lesson.countDocuments({
-          courseId,
-        });
-
-        const completedLessons =
-          progress?.completedLessons?.length || 0;
+        const completedLessons = progress?.completedLessons?.length || 0;
 
         const percentage =
           totalLessons > 0
@@ -201,14 +255,16 @@ export const getCourseStudents = async (req, res) => {
           approvedAt: enrollment.approvedAt,
           progress: percentage,
         };
-      })
+      }),
     );
 
-    res.status(200).json(students);
+    return res.status(200).json(students);
   } catch (error) {
-    res.status(500).json({
+    console.error("Get course students error:", error);
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Unable to retrieve course students.",
     });
   }
 };

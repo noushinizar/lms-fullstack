@@ -3,8 +3,7 @@ import Payment from "../models/Payment.js";
 import Lead from "../models/Lead.js";
 import LeadActivity from "../models/LeadActivity.js";
 import User from "../models/User.js";
-
-
+import mongoose from "mongoose";
 const logEnrollmentActivity = async ({
   enrollment,
   performedBy,
@@ -42,7 +41,6 @@ const logEnrollmentActivity = async ({
     console.error("Enrollment activity logging error:", error);
   }
 };
-
 
 // ===============================================
 // Get All Enrollment Requests
@@ -91,8 +89,13 @@ export const getEnrollmentRequests = async (req, res) => {
 // ===============================================
 export const approveEnrollment = async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid enrollment ID.",
+      });
+    }
     const enrollment = await Enrollment.findById(req.params.id);
-
     if (!enrollment) {
       return res.status(404).json({
         success: false,
@@ -118,7 +121,11 @@ export const approveEnrollment = async (req, res) => {
     enrollment.approvedAt = new Date();
     enrollment.approvedBy = req.user._id;
 
-    // Clear revoke information
+    // Clear previous rejection information
+    enrollment.rejectedAt = undefined;
+    enrollment.rejectedBy = undefined;
+
+    // Clear previous revoke information
     enrollment.revokedAt = undefined;
     enrollment.revokedBy = undefined;
 
@@ -148,8 +155,14 @@ export const approveEnrollment = async (req, res) => {
 // ===============================================
 export const rejectEnrollment = async (req, res) => {
   try {
-    const enrollment = await Enrollment.findById(req.params.id);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid enrollment ID.",
+      });
+    }
 
+    const enrollment = await Enrollment.findById(req.params.id);
     if (!enrollment) {
       return res.status(404).json({
         success: false,
@@ -216,8 +229,14 @@ export const rejectEnrollment = async (req, res) => {
 // ===============================================
 export const revokeEnrollment = async (req, res) => {
   try {
-    const enrollment = await Enrollment.findById(req.params.id);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid enrollment ID.",
+      });
+    }
 
+    const enrollment = await Enrollment.findById(req.params.id);
     if (!enrollment) {
       return res.status(404).json({
         success: false,

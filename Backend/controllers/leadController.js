@@ -298,6 +298,8 @@ const validateCounselor = async (counselorId) => {
 // ============================================================
 
 export const createLead = async (req, res) => {
+  let session;
+
   try {
     const {
       name,
@@ -363,7 +365,7 @@ export const createLead = async (req, res) => {
       return res.status(400).json({ message: "Invalid follow-up date." });
     }
 
-    // Check whether another lead already uses this phone number or email.
+    // Check for duplicate phone numbers or email addresses.
     const duplicates = await findDuplicateLead({
       phone,
       email: normalizedEmail,
@@ -397,53 +399,75 @@ export const createLead = async (req, res) => {
 
       counselorId = counselorResult.value;
     } else {
-      // A counselor creating a lead can only assign it to themselves.
       counselorId = req.user._id;
     }
 
-    const lead = await Lead.create({
-      name: name.trim(),
-      email: normalizedEmail,
-      phone: phone.trim(),
-      interestedCourse: courseResult.value,
-      source: source || "other",
-      status: status || "new",
-      assignedCounselor: counselorId,
-      followUpDate: dateResult.value,
-      notes: notes?.trim() || "",
-      createdBy: req.user._id,
-    });
+    // Create the lead and its activity record atomically.
+    session = await mongoose.startSession();
 
-    const initialChanges = [
-      await createAuditChange("status", null, lead.status),
-      await createAuditChange(
-        "interestedCourse",
-        null,
-        lead.interestedCourse ? String(lead.interestedCourse) : null,
-      ),
-      await createAuditChange(
-        "assignedCounselor",
-        null,
-        lead.assignedCounselor ? String(lead.assignedCounselor) : null,
-      ),
-    ];
+    let createdLead;
 
-    await logLeadActivity({
-      leadId: lead._id,
-      userId: req.user._id,
-      action: "lead_created",
-      description: `Lead "${lead.name}" was created.`,
-      changes: initialChanges,
+    await session.withTransaction(async () => {
+      const [lead] = await Lead.create(
+        [
+          {
+            name: name.trim(),
+            email: normalizedEmail,
+            phone: phone.trim(),
+            interestedCourse: courseResult.value,
+            source: source || "other",
+            status: status || "new",
+            assignedCounselor: counselorId,
+            followUpDate: dateResult.value,
+            notes: notes?.trim() || "",
+            createdBy: req.user._id,
+          },
+        ],
+        { session },
+      );
+
+      const initialChanges = [
+        await createAuditChange("status", null, lead.status, session),
+        await createAuditChange(
+          "interestedCourse",
+          null,
+          lead.interestedCourse ? String(lead.interestedCourse) : null,
+          session,
+        ),
+        await createAuditChange(
+          "assignedCounselor",
+          null,
+          lead.assignedCounselor ? String(lead.assignedCounselor) : null,
+          session,
+        ),
+      ];
+
+      await logLeadActivity({
+        leadId: lead._id,
+        userId: req.user._id,
+        action: "lead_created",
+        description: `Lead "${lead.name}" was created.`,
+        changes: initialChanges,
+        session,
+      });
+
+      createdLead = lead;
     });
 
     return res.status(201).json({
       message: "Lead created successfully.",
-      lead,
+      lead: createdLead,
     });
   } catch (error) {
     console.error("Create lead error:", error);
 
-    return res.status(500).json({ message: "Unable to create lead." });
+    return res.status(500).json({
+      message: "Unable to create lead.",
+    });
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
 
@@ -1699,25 +1723,39 @@ export const importLeads = async (req, res) => {
           throw new Error("Notes must be at most 5000 characters.");
         }
 
-        const lead = await Lead.create({
-          name,
-          phone,
-          email,
-          interestedCourse,
-          source: sourceInput,
-          status: statusInput,
-          assignedCounselor,
-          followUpDate,
-          notes,
-          createdBy: req.user._id,
-        });
+        const session = await mongoose.startSession();
 
-        await logLeadActivity({
-          leadId: lead._id,
-          userId: req.user._id,
-          action: "lead_created",
-          description: "Lead imported from spreadsheet.",
-        });
+        try {
+          await session.withTransaction(async () => {
+            const [lead] = await Lead.create(
+              [
+                {
+                  name,
+                  phone,
+                  email,
+                  interestedCourse,
+                  source: sourceInput,
+                  status: statusInput,
+                  assignedCounselor,
+                  followUpDate,
+                  notes,
+                  createdBy: req.user._id,
+                },
+              ],
+              { session },
+            );
+
+            await logLeadActivity({
+              leadId: lead._id,
+              userId: req.user._id,
+              action: "lead_created",
+              description: "Lead imported from spreadsheet.",
+              session,
+            });
+          });
+        } finally {
+          await session.endSession();
+        }
 
         // Track newly imported records to catch duplicates within this file.
         existingPhones.add(normalizedPhone);
